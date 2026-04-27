@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import flygateRoutes from "./routes/flygateRoutes.js";
 import { connectToDatabase, disconnectFromDatabase } from './config/db.js';
 import { config } from 'dotenv';
@@ -6,6 +7,26 @@ config();
 connectToDatabase();
 const app = express();
 
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:3000,http://localhost:3001")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow server-to-server tools (Postman/curl), configured origins, and localhost dev ports.
+    const isLocalhostDev =
+      typeof origin === "string" &&
+      /^http:\/\/localhost:\d+$/.test(origin);
+
+    if (!origin || allowedOrigins.includes(origin) || isLocalhostDev) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true
+}));
+app.options(/.*/, cors());
 
 // Body parsing middlewares
 app.use(express.json());
