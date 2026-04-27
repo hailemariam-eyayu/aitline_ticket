@@ -1,157 +1,91 @@
-    7
-    2025-09-10 11:44:02.227028	
-    ENATETAA202509101757504642227527
-<?xml version="1.0" encoding="UTF-8"?>
-<FPEnvelope xmlns="urn:iso:std:iso:20022:tech:xsd:verification_request" xmlns:document="urn:iso:std:iso:20022:tech:xsd:acmt.023.001.03" xmlns:header="urn:iso:std:iso:20022:tech:xsd:head.001.001.03">
-    <header:AppHdr>
-        <header:Fr>
-            <header:FIId>
-                <header:FinInstnId>
-                    <header:Othr>
-                        <header:Id>ENATETAA</header:Id>
-                    </header:Othr>
-                </header:FinInstnId>
-            </header:FIId>
-        </header:Fr>
-        <header:To>
-            <header:FIId>
-                <header:FinInstnId>
-                    <header:Othr>
-                        <header:Id>FP</header:Id>
-                    </header:Othr>
-                </header:FinInstnId>
-            </header:FIId>
-        </header:To>
-        <header:BizMsgIdr>ENATETAA202509101757504642227527</header:BizMsgIdr>
-        <header:MsgDefIdr>acmt.023.001.03</header:MsgDefIdr>
-        <header:CreDt>2025-09-10T11:44:02Z</header:CreDt>
-        <document:Sgntr xmlns:document="urn:iso:std:iso:20022:tech:xsd:head.001.001.03">
-            <ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
-                <ds:SignedInfo>
-                    <ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
-                    <ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
-                    <ds:Reference URI="#_080c41cc-64cb-4921-8729-bf5cbb6ee41b">
-                        <ds:Transforms>
-                            <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
-                        </ds:Transforms>
-                        <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                        <ds:DigestValue>P7yLO5L1xB9d8B9egOSe628Kb+BJJaNPBhi32yw+hIo=</ds:DigestValue>
-                    </ds:Reference>
-                    <ds:Reference Type="http://uri.etsi.org/01903/v1.3.2#SignedProperties" URI="#ceacb396-3bb5-4e67-acba-2dec7dc4681a">
-                        <ds:Transforms>
-                            <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
-                        </ds:Transforms>
-                        <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                        <ds:DigestValue>POZp/G2Mx7GOzqfF0lasCmYXDPoOkUigrQRAdZxNBM8=</ds:DigestValue>
-                    </ds:Reference>
-                    <ds:Reference>
-                        <ds:Transforms>
-                            <ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
-                        </ds:Transforms>
-                        <ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                        <ds:DigestValue>Dd3Dvx1styVertWLMHihAg7a9g5hQHJSwZOeRf+9/iA=</ds:DigestValue>
-                    </ds:Reference>
-                </ds:SignedInfo>
-                <ds:SignatureValue>
-Jah5W3ntTTbKuR3W6mlTB/KlQTm2q5z4kF++UGDJSej/BEtZbgGURfiQvNTEyMlNhvkmNpvzH0s7
-8YJvXZaXDFB/4S6dCNQgQNgwjctKBwWpERsOsqQ6aTOJ04n1L/8c+QRTLQUWyFuTB2nJW3ezqbsk
-JTncv0Pub7TN9BahwdM0KaEd5uvv373ViXI9bkO+muVioU0PpkmW5qoA8ZrLMJ3zXF2gYMEb8bJo
-LMpaIs0cjgy/nJ9XLbXU1QvG2SBBYgclKBi02cY1x8U5tifQYKOGe0yVwp8XYFyGr5mkbAGipNI6
-lc971sR5xug1oZPA+WN5IlwqDBh8BOMccdkmvg==
-</ds:SignatureValue>
-                <ds:KeyInfo Id="_080c41cc-64cb-4921-8729-bf5cbb6ee41b">
-                    <ds:X509Data>
-                        <ds:X509IssuerSerial>
-                            <ds:X509IssuerName>CN=ETS IPS Issuing CA,O=EthSwitch,C=ET</ds:X509IssuerName>
-                            <ds:X509SerialNumber>602120120807292683041616932753827431792509014</ds:X509SerialNumber>
-                        </ds:X509IssuerSerial>
-                    </ds:X509Data>
-                </ds:KeyInfo>
-                <ds:Object>
-                    <xades:QualifyingProperties xmlns:xades="http://uri.etsi.org/01903/v1.3.2#">
-                        <xades:SignedProperties Id="ceacb396-3bb5-4e67-acba-2dec7dc4681a">
-                            <xades:SignedSignatureProperties>
-                                <xades:SigningTime>2025-09-10T11:44:02.458870664Z</xades:SigningTime>
-                            </xades:SignedSignatureProperties>
-                        </xades:SignedProperties>
-                    </xades:QualifyingProperties>
-                </ds:Object>
-            </ds:Signature>
-        </document:Sgntr>
-    </header:AppHdr>
-    <document:Document>
-        <document:IdVrfctnReq>
-            <document:Assgnmt>
-                <document:MsgId>ENATETAA202509101757504642227527</document:MsgId>
-                <document:CreDtTm>2025-09-10T14:44:02.227+03:00</document:CreDtTm>
-                <document:Assgnr>
-                    <document:Agt>
-                        <document:FinInstnId>
-                            <document:Othr>
-                                <document:Id>ENATETAA</document:Id>
-                            </document:Othr>
-                        </document:FinInstnId>
-                    </document:Agt>
-                </document:Assgnr>
-                <document:Assgne>
-                    <document:Agt>
-                        <document:FinInstnId>
-                            <document:Othr>
-                                <document:Id>CBETETAA</document:Id>
-                            </document:Othr>
-                        </document:FinInstnId>
-                    </document:Agt>
-                </document:Assgne>
-            </document:Assgnmt>
-            <document:Vrfctn>
-                <document:Id>-</document:Id>
-                <document:PtyAndAcctId>
-                    <document:Acct>
-                        <document:Id>
-                            <document:Othr>
-                                <document:Id>1000166489017</document:Id>
-                                <document:SchmeNm>
-                                    <document:Prtry>ACCT</document:Prtry>
-                                </document:SchmeNm>
-                            </document:Othr>
-                        </document:Id>
-                    </document:Acct>
-                </document:PtyAndAcctId>
-            </document:Vrfctn>
-        </document:IdVrfctnReq>
-    </document:Document>
-</FPEnvelope>	
 
-org.apache.camel.converter.stream.InputStreamCache@4a87263
+========== CBS REQUEST CREATETRANSACTION_FSFS_REQ ==========
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.co
+m/service/FCUBSRTService">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <fcub:CREATETRANSACTION_FSFS_REQ>
+         <fcub:FCUBS_HEADER>
+            <fcub:SOURCE>PTP</fcub:SOURCE>
+            <fcub:UBSCOMP>FCUBS</fcub:UBSCOMP>
+            <fcub:USERID>ADCUSER</fcub:USERID>
+            <fcub:BRANCH>001</fcub:BRANCH>
+            <fcub:MODULEID>RT</fcub:MODULEID>
+            <fcub:SERVICE>FCUBSRTService</fcub:SERVICE>
+            <fcub:OPERATION>CreateTransaction</fcub:OPERATION>
+         </fcub:FCUBS_HEADER>
+         <fcub:FCUBS_BODY>
+            <fcub:Transaction-Details>
+               <fcub:PRD>ATAS</fcub:PRD>
+               <fcub:BRN>001</fcub:BRN>
+               <fcub:TXNBRN>001</fcub:TXNBRN>
+               <fcub:TXNACC>0011111015113001</fcub:TXNACC>
+               <fcub:TXNCCY>ETB</fcub:TXNCCY>
+               <fcub:TXNAMT>500</fcub:TXNAMT>
+               <fcub:NARRATIVE>Test airline for PNR: ABCDFE</fcub:NARRATIVE>
+            </fcub:Transaction-Details>
+         </fcub:FCUBS_BODY>
+      </fcub:CREATETRANSACTION_FSFS_REQ>
+   </soapenv:Body>
+</soapenv:Envelope>
+========== END CBS REQUEST CREATETRANSACTION_FSFS_REQ ==========
 
 
+========== CBS RESPONSE CREATETRANSACTION_FSFS_REQ ==========
+<?xml version='1.0' encoding='UTF-8'?><S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Hea
+der><work:WorkContext xmlns:work="http://oracle.com/weblogic/soap/workarea/">rO0ABXejABt3ZWJsb2dpYy5hcHAuRkN
+VQlNSVFNlcnZpY2UAAADWAAAAI3dlYmxvZ2ljLndvcmthcmVhLlN0cmluZ1dvcmtDb250ZXh0AAsxMi4wLjMuNS4xMAASd2VibG9naWMuYXB
+wLkdXRUpCAAAA1gAAACN3ZWJsb2dpYy53b3JrYXJlYS5TdHJpbmdXb3JrQ29udGV4dAALMTIuMC4zLjUuMTAAAA==</work:WorkContext>
+</S:Header><S:Body><CREATETRANSACTION_FSFS_RES xmlns="http://fcubs.ofss.com/service/FCUBSRTService"><FCUBS_H
+EADER><SOURCE>FLEXCUBE</SOURCE><UBSCOMP>FCUBS</UBSCOMP><MSGID>9261170003257835</MSGID><USERID>ADCUSER</USERI
+D><BRANCH>001</BRANCH><MODULEID>RT</MODULEID><SERVICE>FCUBSRTService</SERVICE><OPERATION>CreateTransaction</
+OPERATION><DESTINATION>PTP</DESTINATION><MULTITRIPID>6261170029953409</MULTITRIPID><FUNCTIONID>DEGRTTLR</FUN
+CTIONID><ACTION>NEW</ACTION><MSGSTAT>SUCCESS</MSGSTAT><ADDL><PARAM><NAME>SERVERSTAT</NAME><VALUE>HOST</VALUE
+></PARAM></ADDL></FCUBS_HEADER><FCUBS_BODY><Transaction-Details><XREF>001ATAS223468683</XREF><FCCREF>001ATAS
+223468683</FCCREF><PRD>ATAS</PRD><BRN>001</BRN><TXNBRN>001</TXNBRN><TXNACC>0011111015113001</TXNACC><TXNCCY>
+ETB</TXNCCY><TXNAMT>500</TXNAMT><TXNTRN>AAS</TXNTRN><OFFSETBRN>001</OFFSETBRN><OFFSETACC>1044570</OFFSETACC>
+<OFFSETCCY>ETB</OFFSETCCY><OFFSETAMT>500</OFFSETAMT><OFFSETTRN>AAS</OFFSETTRN><XRATE>1</XRATE><LCYAMT>500</L
+CYAMT><TXNDATE>2022-12-12</TXNDATE><VALDATE>2022-12-12</VALDATE><RELCUST>1110151</RELCUST><TCYCHGAMT>2.3</TC
+YCHGAMT><TCYCHGAMT1>0.8</TCYCHGAMT1><TCYCHGAMT2>0.12</TCYCHGAMT2><TCYCHGAMT3>0.1</TCYCHGAMT3><TCYTOTCHGAMT>0
+</TCYTOTCHGAMT><NARRATIVE>Test airline for PNR: ABCDFE</NARRATIVE><TRACKREVERSE>N</TRACKREVERSE><LCYXRATE>1<
+/LCYXRATE><MAKERID>ADCUSER</MAKERID><MAKERSTAMP>2022-12-12 16:19:32 PM</MAKERSTAMP><CHECKERID>ADCUSER</CHECK
+ERID><CHECKERSTAMP>2022-12-12 16:19:32 PM</CHECKERSTAMP><RECSTAT>A</RECSTAT><AUTHSTAT>A</AUTHSTAT><LCYCHGAMT
+>2.3</LCYCHGAMT><LCYCHGAMT1>0.8</LCYCHGAMT1><LCYCHGAMT2>0.12</LCYCHGAMT2><LCYCHGAMT3>0.1</LCYCHGAMT3><DRACC>
+TXN</DRACC><TXNDRCR>D</TXNDRCR><BOOKDATE>2022-12-12</BOOKDATE><FT>N</FT><LCYTOTCHGAMT>3.32</LCYTOTCHGAMT><DE
+NMCCY1>ETB</DENMCCY1><DENMAMT1>500</DENMAMT1><DENMAMT2>500</DENMAMT2><ACCTITLE1>SURAFEL TADESSE GUDA  </ACCT
+ITLE1><ACCTITLE2>P2P SETTLMENT A/C</ACCTITLE2><ACTAMT>503.32</ACTAMT><Charge-Details><CHGCOMP>TXN_CHARGE</CH
+GCOMP><CHGAMT>2.3</CHGAMT><CHGCCY>ETB</CHGCCY><TXNCODE>CHG</TXNCODE><NETTINGIND>N</NETTINGIND><CHGGL>1044570
+</CHGGL><TYPE>P</TYPE><LCYCHG>2.3</LCYCHG><XRATE>1</XRATE></Charge-Details><Charge-Details><CHGCOMP>CHARGE_I
+NCOME</CHGCOMP><CHGAMT>0.8</CHGAMT><CHGCCY>ETB</CHGCCY><TXNCODE>CHG</TXNCODE><NETTINGIND>N</NETTINGIND><CHGG
+L>4014290</CHGGL><TYPE>P</TYPE><LCYCHG>0.8</LCYCHG><XRATE>1</XRATE></Charge-Details><Charge-Details><CHGCOMP
+>VAT_FROM_ENAT</CHGCOMP><CHGAMT>0.12</CHGAMT><CHGCCY>ETB</CHGCCY><TXNCODE>VAT</TXNCODE><NETTINGIND>N</NETTIN
+GIND><CHGGL>2061440</CHGGL><TYPE>P</TYPE><LCYCHG>0.12</LCYCHG><XRATE>1</XRATE></Charge-Details><Charge-Detai
+ls><CHGCOMP>DISASTER_RISK_F</CHGCOMP><CHGAMT>0.1</CHGAMT><CHGCCY>ETB</CHGCCY><TXNCODE>DRF</TXNCODE><NETTINGI
+ND>N</NETTINGIND><CHGGL>2061443</CHGGL><TYPE>P</TYPE><LCYCHG>0.1</LCYCHG><XRATE>1</XRATE></Charge-Details></
+Transaction-Details><FCUBS_WARNING_RESP><WARNING><WCODE>GW-SAV-03</WCODE><WDESC>Transaction completed Succes
+fully</WDESC></WARNING></FCUBS_WARNING_RESP></FCUBS_BODY></CREATETRANSACTION_FSFS_RES></S:Body></S:Envelope>
+========== END CBS RESPONSE CREATETRANSACTION_FSFS_REQ ==========
 
+prisma:query INSERT INTO "public"."FLYGATEDetails" ("orderId","reqType","RESPCODE","RESPRESULT","AMOUNT","tr
+aceNumber","orderStatusCode","resultDesc","CBSRefNo","isRefund","entryDate") VALUES ($1,$2,$3,$4,$5,$6,$7,$8
+,$9,$10,$11) RETURNING "public"."FLYGATEDetails"."auto", "public"."FLYGATEDetails"."orderId", "public"."FLYG
+ATEDetails"."reqType", "public"."FLYGATEDetails"."RESPCODE", "public"."FLYGATEDetails"."RESPRESULT", "public
+"."FLYGATEDetails"."AMOUNT"::numeric, "public"."FLYGATEDetails"."traceNumber", "public"."FLYGATEDetails"."or
+derStatusCode", "public"."FLYGATEDetails"."resultDesc", "public"."FLYGATEDetails"."CBSRefNo", "public"."FLYG
+ATEDetails"."isRefund", "public"."FLYGATEDetails"."entryDate"
 
+========== FLYGATE CONFIRM REQUEST ==========
+{
+  "OrderId": "ABCDFE",
+  "shortCode": "526341",
+  "Amount": 500,
+  "Currency": "ETB",
+  "status": 1,
+  "remark": "Airline Test Pay",
+  "TraceNumber": "TRC1777296161143",
+  "ReferenceNumber": "001ATAS223468683",
+  "PayerCustomerName": "Flygate Customer",
+  "PaidAccountNumber": "0011230708313001"
+}
+========== END FLYGATE CONFIRM REQUEST ==========
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-org.apache.camel.converter.stream.InputStreamCache@4a87263

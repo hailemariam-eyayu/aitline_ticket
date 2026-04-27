@@ -1,11 +1,7 @@
 import express from 'express';
-import movieRoutes from "./routes/MovieRoutes.js";
-import authRoutes from "./routes/AuthRoutes.js";
 import flygateRoutes from "./routes/flygateRoutes.js";
-import watchlistRoutes from "./routes/watchListItemsRoute.js"
 import { connectToDatabase, disconnectFromDatabase } from './config/db.js';
 import { config } from 'dotenv';
-import { watchlistStatus } from '@prisma/client';
 config();
 connectToDatabase();
 const app = express();
@@ -15,19 +11,13 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-//API Routes
-
-console.log("Auth routes");
-app.use("/auth", authRoutes);
-console.log("Movie routes loaded");
-app.use("/movies", movieRoutes);
-console.log("Flygate routes loaded");
+// API Routes
 app.use("/airline", flygateRoutes);
 
 //Handle unhandled promise rejection eg, DB connection errors
 process.on("unhandledRejection", (err) => {
     console.error("Unhandled Rejection:", err);
-    Server.close(async () => {
+    server.close(async () => {
         await disconnectFromDatabase();
         process.exit(1);
     });
@@ -49,6 +39,6 @@ process.on("SIGTERM", async () => {
 
 
 const port = process.env.PORT || 4001;
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Server is running at http://localhost:${port}`);
 });
