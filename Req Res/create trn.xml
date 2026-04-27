@@ -1,0 +1,166 @@
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.com/service/FCUBSRTService">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <fcub:CREATETRANSACTION_FSFS_REQ>
+         <fcub:FCUBS_HEADER>
+            <fcub:SOURCE>ADC</fcub:SOURCE>
+            <fcub:UBSCOMP>FCUBS</fcub:UBSCOMP>
+            <fcub:USERID>ADCUSER</fcub:USERID>
+            <fcub:BRANCH>001</fcub:BRANCH>
+            <fcub:SERVICE>FCUBSRTService</fcub:SERVICE>
+            <fcub:OPERATION>CreateTransaction</fcub:OPERATION>
+         </fcub:FCUBS_HEADER>
+         <fcub:FCUBS_BODY>
+            <fcub:Transaction-Details>
+               <fcub:PRD>ATAD</fcub:PRD>
+               <fcub:BRN>001</fcub:BRN>
+               <!--Optional:-->
+               <fcub:TXNACC>2061480</fcub:TXNACC>
+               <!--Optional:-->
+               <fcub:TXNCCY>ETB</fcub:TXNCCY>
+               <!--Optional:-->
+               <fcub:TXNAMT>10</fcub:TXNAMT>
+               <!--Optional:-->
+               <fcub:OFFSETBRN>004</fcub:OFFSETBRN>
+               <!--Optional:-->
+               <fcub:OFFSETACC>2061660</fcub:OFFSETACC>
+               <!--Optional:-->
+               <fcub:OFFSETCCY>ETB</fcub:OFFSETCCY>
+               <!--Optional:-->
+               <fcub:OFFSETAMT>10</fcub:OFFSETAMT>
+            </fcub:Transaction-Details>
+         </fcub:FCUBS_BODY>
+      </fcub:CREATETRANSACTION_FSFS_REQ>
+   </soapenv:Body>
+</soapenv:Envelope>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+   <S:Header>
+      <work:WorkContext xmlns:work="http://oracle.com/weblogic/soap/workarea/">rO0ABXejABt3ZWJsb2dpYy5hcHAuRkNVQlNSVFNlcnZpY2UAAADWAAAAI3dlYmxvZ2ljLndvcmthcmVhLlN0cmluZ1dvcmtDb250ZXh0AAsxMi4wLjMuNS4xMAASd2VibG9naWMuYXBwLkdXRUpCAAAA1gAAACN3ZWJsb2dpYy53b3JrYXJlYS5TdHJpbmdXb3JrQ29udGV4dAALMTIuMC4zLjUuMTAAAA==</work:WorkContext>
+   </S:Header>
+   <S:Body>
+      <CREATETRANSACTION_FSFS_RES xmlns="http://fcubs.ofss.com/service/FCUBSRTService">
+         <FCUBS_HEADER>
+            <SOURCE>FLEXCUBE</SOURCE>
+            <UBSCOMP>FCUBS</UBSCOMP>
+            <MSGID>9261170003257748</MSGID>
+            <USERID>ADCUSER</USERID>
+            <BRANCH>001</BRANCH>
+            <SERVICE>FCUBSRTService</SERVICE>
+            <OPERATION>CreateTransaction</OPERATION>
+            <DESTINATION>ADC</DESTINATION>
+            <MULTITRIPID>6261170029953309</MULTITRIPID>
+            <FUNCTIONID>DEGRTTLR</FUNCTIONID>
+            <ACTION>NEW</ACTION>
+            <MSGSTAT>SUCCESS</MSGSTAT>
+            <ADDL>
+               <PARAM>
+                  <NAME>SERVERSTAT</NAME>
+                  <VALUE>HOST</VALUE>
+               </PARAM>
+            </ADDL>
+         </FCUBS_HEADER>
+         <FCUBS_BODY>
+            <Transaction-Details>
+               <XREF>001ATAD22346A03I</XREF>
+               <FCCREF>001ATAD22346A03I</FCCREF>
+               <PRD>ATAD</PRD>
+               <BRN>001</BRN>
+               <TXNBRN>001</TXNBRN>
+               <TXNACC>2061480</TXNACC>
+               <TXNCCY>ETB</TXNCCY>
+               <TXNAMT>10</TXNAMT>
+               <TXNTRN>AAD</TXNTRN>
+               <OFFSETBRN>004</OFFSETBRN>
+               <OFFSETACC>2061660</OFFSETACC>
+               <OFFSETCCY>ETB</OFFSETCCY>
+               <OFFSETAMT>10</OFFSETAMT>
+               <OFFSETTRN>AAD</OFFSETTRN>
+               <XRATE>1</XRATE>
+               <LCYAMT>10</LCYAMT>
+               <TXNDATE>2022-12-12</TXNDATE>
+               <VALDATE>2022-12-12</VALDATE>
+               <RELCUST>0000002</RELCUST>
+               <TCYCHGAMT>0</TCYCHGAMT>
+               <TCYCHGAMT1>0</TCYCHGAMT1>
+               <TCYCHGAMT2>0</TCYCHGAMT2>
+               <TCYTOTCHGAMT>0</TCYTOTCHGAMT>
+               <TRACKREVERSE>N</TRACKREVERSE>
+               <LCYXRATE>1</LCYXRATE>
+               <MAKERID>ADCUSER</MAKERID>
+               <MAKERSTAMP>2022-12-12 14:41:17 PM</MAKERSTAMP>
+               <CHECKERID>ADCUSER</CHECKERID>
+               <CHECKERSTAMP>2022-12-12 14:41:17 PM</CHECKERSTAMP>
+               <RECSTAT>A</RECSTAT>
+               <AUTHSTAT>A</AUTHSTAT>
+               <LCYCHGAMT>0</LCYCHGAMT>
+               <LCYCHGAMT1>0</LCYCHGAMT1>
+               <LCYCHGAMT2>0</LCYCHGAMT2>
+               <DRACC>TXN</DRACC>
+               <TXNDRCR>D</TXNDRCR>
+               <BOOKDATE>2022-12-12</BOOKDATE>
+               <FT>N</FT>
+               <LCYTOTCHGAMT>0</LCYTOTCHGAMT>
+               <DENMCCY1>ETB</DENMCCY1>
+               <DENMAMT1>10</DENMAMT1>
+               <DENMAMT2>10</DENMAMT2>
+               <ACCTITLE1>ENAT WALLET SUSPANSE</ACCTITLE1>
+               <ACCTITLE2>WALLET PAYABLE</ACCTITLE2>
+               <ACTAMT>10</ACTAMT>
+               <Charge-Details>
+                  <CHGCOMP>TXN_CHARGE</CHGCOMP>
+                  <CHGAMT>0</CHGAMT>
+                  <CHGCCY>ETB</CHGCCY>
+                  <TXNCODE>CHG</TXNCODE>
+                  <NETTINGIND>N</NETTINGIND>
+                  <CHGGL>4014300</CHGGL>
+                  <TYPE>F</TYPE>
+                  <LCYCHG>0</LCYCHG>
+                  <XRATE>1</XRATE>
+               </Charge-Details>
+               <Charge-Details>
+                  <CHGCOMP>VAT</CHGCOMP>
+                  <CHGAMT>0</CHGAMT>
+                  <CHGCCY>ETB</CHGCCY>
+                  <TXNCODE>VAT</TXNCODE>
+                  <NETTINGIND>N</NETTINGIND>
+                  <CHGGL>2061780</CHGGL>
+                  <TYPE>F</TYPE>
+                  <LCYCHG>0</LCYCHG>
+                  <XRATE>1</XRATE>
+               </Charge-Details>
+               <Charge-Details>
+                  <CHGCOMP>DISASTER_RISK_ENAT</CHGCOMP>
+                  <CHGAMT>0</CHGAMT>
+                  <CHGCCY>ETB</CHGCCY>
+                  <TXNCODE>DRF</TXNCODE>
+                  <NETTINGIND>N</NETTINGIND>
+                  <CHGGL>2061443</CHGGL>
+                  <TYPE>F</TYPE>
+                  <LCYCHG>0</LCYCHG>
+                  <XRATE>1</XRATE>
+               </Charge-Details>
+            </Transaction-Details>
+            <FCUBS_WARNING_RESP>
+               <WARNING>
+                  <WCODE>GW-SAV-03</WCODE>
+                  <WDESC>Transaction completed Succesfully</WDESC>
+               </WARNING>
+            </FCUBS_WARNING_RESP>
+         </FCUBS_BODY>
+      </CREATETRANSACTION_FSFS_RES>
+   </S:Body>
+</S:Envelope>

@@ -1,0 +1,17 @@
+<!--StartIPS-->
+<add key="IPSURL" value="http://10.1.22.77:8089/" />
+<add key="IPSDEBITINSTID" value="ETSETAA" />
+
+<!--IPS End -->
+
+<!-- Start FLYGATE -->
+	  <add key="FLYTOKEN" value="RW5hdEJhbmtUZXN0QGV0aGlvcGlhbmFpcmxpbmVzLmNvbTpFbmF0QmFua1Rlc3RAITIz"/>
+	  <add key="FLYENDPOINT" value="https://ethiopiangatewaytest.azurewebsites.net/"/>
+	  <add key="FLYSHORTCODE" value="526341"/>
+	  <add key="FLYFOP" value="138"/>
+	  <add key ="FLYGATEINHEADER" value="ZW5hdF9mbHl1c2VyOmZseUBlbmF0Nzg5"/> <!-- enat_flyuser:fly@enat789 -->
+           <add key="CoreAcc.CoreAccounts" value="http://10.1.12.35/MWUAT/CoreAccounts.asmx"/>
+<!-- End FLYGATE -->
+
+
+https://ethiopiangatewaytest.azurewebsites.net/Enat/api/V1.0/Enat/GetOrder?OrderId=OPAZHJ&shortCode=526341&token=RW5hdEJhbmtUZXN0QGV0aGlvcGlhbmFpcmxpbmVzLmNvbTpFbmF0QmFua1Rlc3RAITIz

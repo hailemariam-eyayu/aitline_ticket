@@ -1,0 +1,22 @@
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.com/service/FCUBSRTService">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <fcub:REVERSETRANSACTION_FSFS_REQ>
+           <fcub:FCUBS_HEADER>
+    <fcub:SOURCE>PTP</fcub:SOURCE>
+    <fcub:UBSCOMP>FCUBS</fcub:UBSCOMP>
+    <fcub:CORRELID>20240527020200d</fcub:CORRELID>
+    <fcub:USERID>PTPUSER</fcub:USERID>
+    <fcub:BRANCH>001</fcub:BRANCH>
+    <fcub:MODULEID>RT</fcub:MODULEID>
+    <fcub:SERVICE>FCUBSRTService</fcub:SERVICE>
+    <fcub:OPERATION>ReverseTransaction</fcub:OPERATION>
+  </fcub:FCUBS_HEADER>
+         <fcub:FCUBS_BODY>
+            <fcub:Transaction-Details>
+               <fcub:FCCREF>001FULP223461001</fcub:FCCREF>
+            </fcub:Transaction-Details>
+         </fcub:FCUBS_BODY>
+      </fcub:REVERSETRANSACTION_FSFS_REQ>
+   </soapenv:Body>
+</soapenv:Envelope>

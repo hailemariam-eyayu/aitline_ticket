@@ -1,0 +1,71 @@
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.com/service/FCUBSRTService">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <fcub:REVERSETRANSACTION_FSFS_REQ>
+           <fcub:FCUBS_HEADER>
+    <fcub:SOURCE>PTP</fcub:SOURCE>
+    <fcub:UBSCOMP>FCUBS</fcub:UBSCOMP>
+    <fcub:CORRELID>20240527020200d</fcub:CORRELID>
+    <fcub:USERID>PTPUSER</fcub:USERID>
+    <fcub:BRANCH>001</fcub:BRANCH>
+    <fcub:MODULEID>RT</fcub:MODULEID>
+    <fcub:SERVICE>FCUBSRTService</fcub:SERVICE>
+    <fcub:OPERATION>ReverseTransaction</fcub:OPERATION>
+  </fcub:FCUBS_HEADER>
+         <fcub:FCUBS_BODY>
+            <fcub:Transaction-Details>
+               <fcub:FCCREF>001FULP223461001</fcub:FCCREF>
+            </fcub:Transaction-Details>
+         </fcub:FCUBS_BODY>
+      </fcub:REVERSETRANSACTION_FSFS_REQ>
+   </soapenv:Body>
+</soapenv:Envelope>
+
+
+
+
+
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+   <S:Header>
+      <work:WorkContext xmlns:work="http://oracle.com/weblogic/soap/workarea/">rO0ABXejABt3ZWJsb2dpYy5hcHAuRkNVQlNSVFNlcnZpY2UAAADWAAAAI3dlYmxvZ2ljLndvcmthcmVhLlN0cmluZ1dvcmtDb250ZXh0AAsxMi4wLjMuNS4xMAASd2VibG9naWMuYXBwLkdXRUpCAAAA1gAAACN3ZWJsb2dpYy53b3JrYXJlYS5TdHJpbmdXb3JrQ29udGV4dAALMTIuMC4zLjUuMTAAAA==</work:WorkContext>
+   </S:Header>
+   <S:Body>
+      <REVERSETRANSACTION_FSFS_RES xmlns="http://fcubs.ofss.com/service/FCUBSRTService">
+         <FCUBS_HEADER>
+            <SOURCE>FLEXCUBE</SOURCE>
+            <UBSCOMP>FCUBS</UBSCOMP>
+            <MSGID>9261150003257651</MSGID>
+            <CORRELID>20240527020200d</CORRELID>
+            <USERID>PTPUSER</USERID>
+            <BRANCH>001</BRANCH>
+            <MODULEID>RT</MODULEID>
+            <SERVICE>FCUBSRTService</SERVICE>
+            <OPERATION>ReverseTransaction</OPERATION>
+            <SOURCE_OPERATION/>
+            <SOURCE_USERID/>
+            <DESTINATION>PTP</DESTINATION>
+            <MULTITRIPID>6261150029953138</MULTITRIPID>
+            <FUNCTIONID>DEGRTTLR</FUNCTIONID>
+            <ACTION>REVERSE</ACTION>
+            <MSGSTAT>FAILURE</MSGSTAT>
+            <ADDL>
+               <PARAM>
+                  <NAME>SERVERSTAT</NAME>
+                  <VALUE>HOST</VALUE>
+               </PARAM>
+            </ADDL>
+         </FCUBS_HEADER>
+         <FCUBS_BODY>
+            <Transaction-Details>
+               <FCCREF>001FULP223461001</FCCREF>
+            </Transaction-Details>
+            <FCUBS_ERROR_RESP>
+               <ERROR>
+                  <ECODE>GW-REV-04</ECODE>
+                  <EDESC>Transaction is already Reversed</EDESC>
+               </ERROR>
+            </FCUBS_ERROR_RESP>
+         </FCUBS_BODY>
+      </REVERSETRANSACTION_FSFS_RES>
+   </S:Body>
+</S:Envelope>

@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+model User {
+  id        String      @id @default(uuid())
+  name      String      
+  email     String   @unique
+  password  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  //Relationships
+  movies Movie[] @relation("MovieCreator")
+  watchlistItems WatchlistItem[]
+}
+
+model Movie {
+  id          String      @id @default(uuid())
+  title       String
+  overview    String?
+  releaseYear  Int  
+  genres String[] @default([])
+  runtime      Int?
+  posterUrl    String?
+  createdBy     String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  //relationships
+  creator User @relation("MovieCreator",fields: [createdBy], references: [id], onDelete: Cascade)
+  watchlistItems WatchlistItem[]
+}
+
+model WatchlistItem {
+  id      String     @id @default(uuid()) 
+  userId  String
+  movieId String
+  status watchlistStatus @default(PLANNED)
+  rating Int?
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  //relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie Movie @relation(fields: [movieId], references: [id], onDelete: Cascade)
+}
+
+model FLYGATEDetails {
+  auto             BigInt   @id @default(autoincrement())
+  orderId          String   @db.VarChar(20)
+  reqType          Int
+  respCode         String   @map("RESPCODE") @db.VarChar(10)
+  respResult       String   @map("RESPRESULT") @db.Text // nvarchar 2000 is best as Text
+  amount           Decimal  @map("AMOUNT") @db.Money
+  traceNumber      String   @db.VarChar(50)
+  orderStatusCode  Int
+  resultDesc       String   @db.VarChar(100)
+  cbsRefNo         String   @map("CBSRefNo") @db.VarChar(50)
+  isRefund         Int      @db.SmallInt // PostgreSQL uses SmallInt for tinyint
+  entryDate        DateTime @default(now()) @db.Timestamp
+}
+
+
+model GlConfiguration {
+  code            String @id @db.VarChar(10) @map("CODE")
+  receivableGlAc  String @db.VarChar(30) @map("RECEIVABLEGLAC")
+  suspenseGlAc    String @db.VarChar(30) @map("SUSPENSEGLAC")
+  payableGlAcNo   String @db.VarChar(30) @map("PAYABLEGLACNO")
+  status          Int?   @map("Status") // The '?' makes it nullable as per your [NULL] requirement
+}
+
+
+model TransactionLedger {
+  code                Int       @id @default(autoincrement()) @map("CODE")
+  userId              String?   @db.VarChar(50) @map("UserID")
+  trnDate             DateTime? @db.Timestamp @map("TrnDate")
+  branchCode          Int?      @map("BranchCode")
+  
+  // Account Details
+  drAcNo              String?   @db.VarChar(50) @map("DrAcNO")
+  crAcNo              String?   @db.VarChar(50) @map("CrAcNO")
+  
+  // Customer Info
+  firstName           String?   @db.VarChar(200) @map("FIRSTNAME")
+  lastName            String?   @db.VarChar(200) @map("LASTNAME")
+  gender              Int?      @db.SmallInt @map("GENDER")
+  mobileNo            String?   @db.VarChar(50) @map("MOBILENO")
+  emailId             String?   @db.VarChar(500) @map("EMAILID")
+  resAddress          String?   @db.Text @map("RESADDRESS") // nvarchar 4000
+  customerName        String?   @db.VarChar(500) @map("CUSTOMERNAME")
+  custName            String?   @db.VarChar(500) @map("CustName")
+  citizenId           String?   @db.VarChar(50) @map("CitizenId")
+
+  // Flight & Payment Info
+  pnr                 String?   @db.VarChar(25) @map("PNR")
+  amount              Decimal?  @db.Money @map("Amount")
+  currency            String?   @db.VarChar(5) @map("Currency")
+  remarks             String?   @db.VarChar(500) @map("Remarks")
+  dueAmount           Decimal?  @db.Money @map("DueAmount")
+  invRefNo            Int?      @map("InvRefNo")
+  status              Decimal?  @db.Decimal @map("STATUS")
+  expDate             String?   @db.VarChar(100) @map("ExpDate")
+  traceNumber         String?   @db.VarChar(150) @map("TraceNumber")
+  batchId             String?   @db.VarChar(150) @map("BatchId")
+  bankRefNo           String?   @db.VarChar(500) @map("BankRefNo")
+  processedDate       DateTime? @db.Timestamp @map("ProcessedDate")
+  trnCharge           Decimal?  @db.Money @map("TrnCharge")
+  vatAmt              Decimal?  @db.Money @map("VATAmt")
+  disasterRiskAmt     Decimal?  @db.Money @map("DisasterRiskAmt")
+  channel             String?   @db.VarChar(20) @map("Channel")
+  utilRefNo           String?   @db.VarChar(50) @map("UtilRefNo")
+
+  // Audit Trail
+  tScrollId           Int?      @map("TSCROLLID")
+  entryBy             Int?      @map("EntryBy")
+  entryDate           DateTime? @default(now()) @db.Timestamp @map("EntryDate")
+  authorised          Int?      @db.SmallInt @map("Authorised")
+  entryNode           Int?      @map("EntryNode")
+  authoOpr            Int?      @map("AuthoOpr")
+  authoNode           Int?      @map("AuthoNode")
+  authoTime           DateTime? @db.Timestamp @map("AuthoTime")
+
+  // Errors & SOAP Handling
+  faultCode           Decimal?  @db.Decimal @map("FAULTCODE") // smallmoney maps well to Decimal
+  faultString         String?   @db.Text @map("FAULTSTRING")
+
+  // Refund Handling
+  isRefund            Int?      @db.SmallInt @map("IsRefund")
+  refundStatus        Int?      @db.SmallInt @map("RefundStatus")
+  refundReferenceCode String?   @db.VarChar(250) @map("RefundReferenceCode")
+  refundOp            String?   @db.VarChar(500) @map("REFUNDOP")
+  orgPnr              String?   @db.VarChar(25) @map("OrgPNR")
+  orgBankRefNo        String?   @db.VarChar(500) @map("OrgBankRefNo")
+}
+
+
+model RefundLedger {
+  auto                Int       @id @default(autoincrement()) @map("Auto")
+  receiveDate         DateTime? @db.Timestamp @map("ReceiveDate")
+  shortCode           String?   @db.VarChar(10) @map("ShortCode")
+  orderId             String?   @db.VarChar(15) @map("OrderId")
+  amount              Decimal?  @db.Money @map("Amount")
+  
+  // CBS & FlyGate References
+  cbsRefNumber        String?   @db.VarChar(25) @map("CBSRefNumber")
+  flyRefundCode       String?   @db.VarChar(30) @map("FLYRefundCode")
+  
+  // Acknowledgement Tracking
+  acknowledgeStatus   Int?      @db.SmallInt @map("AcknowledgeStatus")
+  acknowledgDesc      String?   @db.VarChar(50) @map("AcknowledgDesc")
+  
+  // Refund Processing
+  refundStatus        Int?      @db.SmallInt @map("RefundStatus")
+  refundCbsRef        String?   @db.VarChar(25) @map("RefundCBSRef")
+  refundDate          DateTime? @db.Timestamp @map("RefundDate")
+  refundDesc          String?   @db.VarChar(100) @map("RefundDesc")
+  
+  // Final Confirmation
+  confirmRefundStatus Int?      @db.SmallInt @map("ConfirmRefundStatus")
+  confirmRefundDate   DateTime? @db.Timestamp @map("ConfirmRefundDate")
+  status              Int?      @db.SmallInt @map("status")
+}
+
+// WERTYU
+model Transactions {
+  auto             Int       @id @default(autoincrement()) @map("Auto")
+  userId           String?   @db.VarChar(25) @map("UserId")
+  scrollId         String?   @db.VarChar(50) @map("ScrollId")
+  batchId          String?   @db.VarChar(50) @map("BatchId")
+  iRefNo           String?   @db.VarChar(50) @map("IRefNo")
+  trnDate          DateTime? @db.Timestamp @map("TrnDate")
+  branchCode       String?   @db.VarChar(10) @map("BranchCode")
+  acNo             String?   @db.VarChar(20) @map("AcNo")
+  depNo            Int?      @db.SmallInt @map("DepNo")
+  moduleType       Int?      @db.SmallInt @map("ModuleType")
+  crDr             String?   @db.VarChar(6) @map("CrDr") // Expected 'DEBIT' or 'CREDIT'
+  amount           Decimal?  @db.Money @map("Amount")
+  currencyCode     String?   @db.VarChar(5) @map("CurrencyCode")
+  utilRefNo        String?   @db.VarChar(100) @map("UtilRefNo")
+  utility          String?   @db.VarChar(100) @map("Utility")
+  custIden         String?   @db.VarChar(50) @map("CustIden")
+  depPeriod        String?   @db.VarChar(100) @map("DepPeriod")
+  isExcess         String?   @db.VarChar(10) @map("IsExcess")
+  comAmount        Decimal?  @db.Money @map("ComAmount")
+  exchgAmount      Decimal?  @db.Money @map("ExchgAmount")
+  particulars      String?   @db.VarChar(500) @map("Particulars")
+  remarks          String?   @db.VarChar(100) @map("Remarks")
+  status           Int?      @db.SmallInt @map("Status")
+  entryTerminal    String?   @db.VarChar(200) @map("EntryTerminal")
+  entryTime        DateTime? @db.Timestamp @map("EntryTime")
+  uniqueId         String?   @db.VarChar(50) @unique @map("UniqueId")
+  processedTime    DateTime? @db.Timestamp @map("ProcessedTime")
+  dispNo           Int?      @db.SmallInt @map("DispNo")
+  tScrollId        Int?      @map("TScrollId")
+  ackBy            String?   @db.VarChar(25) @map("AckBy")
+  channel          String?   @db.VarChar(10) @map("Channel")
+  subChannel       String?   @db.VarChar(10) @map("SubChannel")
+  faultCode        Decimal?  @db.Decimal @map("FAULTCODE")
+  faultString      String?   @db.Text @map("FAULTSTRING") // nvarchar 1000
+  passBy           String?   @db.VarChar(25) @map("PassBy")
+  instAmount       Decimal?  @db.Money @map("InstAmount")
+  newMatAmount     Decimal?  @db.Money @map("NewMatAmount")
+  trnAccountAmt    Decimal?  @db.Money @map("TrnAccountAmt")
+  trnAccount       String?   @db.VarChar(50) @map("TrnAccount")
+  thirdPartyName   String?   @db.Text @map("ThirdPartyName") // nvarchar 1000
+  disasterRiskAmt  Decimal?  @db.Money @map("DisasterRiskAmt")
+}
+
+enum watchlistStatus {
+  PLANNED
+  WATCHING
+  COMPLETED
+  DROPPED
+}
+
+enum trnStatus{
+  Success
+  Failed
+  Pending
+  Reversed
+}
