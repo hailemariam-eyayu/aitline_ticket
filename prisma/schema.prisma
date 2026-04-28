@@ -184,6 +184,40 @@ model CbsTransfer {
   @@map("CbsTransfer")
 }
 
+// ─── Ride bill payment ────────────────────────────────────────────────────────
+
+/// Ride bill query + payment audit log
+model RideTransaction {
+  id                Int      @id @default(autoincrement())
+  phone             String   @map("Phone") @db.VarChar(20)
+  fullName          String?  @map("FullName") @db.VarChar(200)
+  accountStatus     String?  @map("AccountStatus") @db.VarChar(20)  // active, inactive
+  amount            Decimal? @map("Amount") @db.Money
+  billRefNo         String?  @map("BillRefNo") @db.VarChar(100)     // CBS FCCREF
+  transTime         String?  @map("TransTime") @db.VarChar(20)      // YYYYMMDDHHmmss
+  remark            String?  @map("Remark") @db.VarChar(500)
+  acknowledgementId String?  @map("AcknowledgementId") @db.VarChar(100)  // from Ride confirm response
+  
+  // CBS transfer details
+  cbsRefNo          String?  @map("CBSRefNo") @db.VarChar(50)
+  traceNumber       String?  @map("TraceNumber") @db.VarChar(150)
+  drAcNo            String?  @map("DrAcNo") @db.VarChar(50)
+  crAcNo            String?  @map("CrAcNo") @db.VarChar(50)
+  
+  // Status tracking
+  queryStatus       Int      @default(0) @map("QueryStatus") @db.SmallInt      // 1=success, 0=failed
+  paymentStatus     Int      @default(0) @map("PaymentStatus") @db.SmallInt    // 1=success, 0=failed
+  cbsStatus         Int      @default(0) @map("CBSStatus") @db.SmallInt        // 1=success, 0=failed
+  
+  errorDesc         String?  @map("ErrorDesc") @db.VarChar(500)
+  queryResponse     String?  @map("QueryResponse") @db.Text     // raw JSON from Ride query
+  confirmResponse   String?  @map("ConfirmResponse") @db.Text   // raw JSON from Ride confirm
+  
+  entryTime         DateTime @default(now()) @map("EntryTime") @db.Timestamp
+
+  @@map("RideTransaction")
+}
+
 model RefundDetails {
   auto        Int      @id @default(autoincrement()) @map("Auto")
   receiveDate DateTime @default(now()) @map("ReceiveDate") @db.Timestamp
