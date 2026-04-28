@@ -40,28 +40,28 @@ app.use(express.urlencoded({ extended: true }));
 // API Routes
 app.use("/airline", flygateRoutes);
 
-//Handle unhandled promise rejection eg, DB connection errors
-process.on("unhandledRejection", (err) => {
-    console.error("Unhandled Rejection:", err);
-    server.close(async () => {
-        await disconnectFromDatabase();
-        process.exit(1);
-    });
-  });
+// //Handle unhandled promise rejection eg, DB connection errors
+// process.on("unhandledRejection", (err) => {
+//     console.error("Unhandled Rejection:", err);
+//     server.close(async () => {
+//         await disconnectFromDatabase();
+//         process.exit(1);
+//     });
+//   });
 
-// Handle uncaught exceptions 
-process.on("uncaughtException", async (err) => {
-    console.error("Uncaught Exception:", err);
-    await disconnectFromDatabase();
-    process.exit(1);
-} ); 
+// // Handle uncaught exceptions 
+// process.on("uncaughtException", async (err) => {
+//     console.error("Uncaught Exception:", err);
+//     await disconnectFromDatabase();
+//     process.exit(1);
+// } ); 
 
-//Graceful shutdown on SIGINT (Ctrl+C) or SIGTERM
-process.on("SIGTERM", async () => {
-    console.log("Received SIGTERM signal. Shutting down gracefully...");
-    await disconnectFromDatabase();
-    process.exit(0);
-});
+// //Graceful shutdown on SIGINT (Ctrl+C) or SIGTERM
+// process.on("SIGTERM", async () => {
+//     console.log("Received SIGTERM signal. Shutting down gracefully...");
+//     await disconnectFromDatabase();
+//     process.exit(0);
+// });
 
 
 const port = process.env.PORT || 4001;

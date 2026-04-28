@@ -47,7 +47,7 @@ const validatePNR = async (req, res) => {
         if (response.data && (response.data.statusCodeResponseDescription === "Success" || amount > 0)) {
             let savedOrder = null;
             try {
-                savedOrder = await prisma.pendingOrder.upsert({
+                savedOrder = await prisma.fLYGATEDetails.upsert({
                     where: { orderId: orderid },
                     update: { amount, customerName },
                     create: { orderId: orderid, amount, customerName }
