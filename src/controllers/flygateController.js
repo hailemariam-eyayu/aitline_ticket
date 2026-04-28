@@ -14,9 +14,9 @@ config();
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 const shortcode = process.env.shortCodeT || 526341;
-const url = process.env.BASE_URL;
-const AIRLINE_USER = process.env.AIRLINE_USER || 'EnatBankTest@ethiopianairlines.com';
-const AIRLINE_PASS = process.env.AIRLINE_PASS || 'EnatBankTest@!23';
+const url = (process.env.BASE_URL || "").trim().replace(/\/$/, "");
+const AIRLINE_USER = (process.env.AIRLINE_USER || 'EnatBankTest@ethiopianairlines.com').trim();
+const AIRLINE_PASS = (process.env.AIRLINE_PASS || 'EnatBankTest@!23').trim();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
