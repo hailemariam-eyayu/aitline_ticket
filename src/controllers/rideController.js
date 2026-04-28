@@ -7,16 +7,19 @@ config();
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-const RIDE_BASE_URL  = (process.env.RIDE_BASE_URL  || "https://stagingmp.rideplus.co").replace(/\/$/, "");
-const RIDE_API_KEY   = process.env.RIDE_API_KEY    || "";
-const CBS_RT_URL     = process.env.cbs_endpoint    || process.env.cbs_url || "http://10.1.22.100:7003/FCUBSRTService/FCUBSRTService";
-const CBS_CR_ACCOUNT = process.env.ride_cr_account || process.env.cbs_offset_account || "0461112216017001";
+const RIDE_BASE_URL   = (process.env.RIDE_BASE_URL   || "https://stagingmp.rideplus.co").replace(/\/$/, "");
+const RIDE_USERNAME   = process.env.RIDE_USERNAME    || "enatstagingpass";
+const RIDE_PASSWORD   = process.env.RIDE_PASSWORD    || "enat@mpstaging!";
+const CBS_RT_URL      = process.env.cbs_endpoint     || process.env.cbs_url || "http://10.1.22.100:7003/FCUBSRTService/FCUBSRTService";
+const CBS_CR_ACCOUNT  = process.env.ride_cr_account  || process.env.cbs_offset_account || "0461112216017001";
 
-// Ride API headers — add API key if provided
+// Build Basic Auth header from credentials
 const rideHeaders = () => {
-    const h = { "Content-Type": "application/json" };
-    if (RIDE_API_KEY) h["Authorization"] = `Bearer ${RIDE_API_KEY}`;
-    return h;
+    const token = Buffer.from(`${RIDE_USERNAME}:${RIDE_PASSWORD}`).toString("base64");
+    return {
+        "Content-Type":  "application/json",
+        "Authorization": `Basic ${token}`
+    };
 };
 
 const logJson = (label, data) =>
