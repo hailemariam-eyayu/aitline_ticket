@@ -210,16 +210,81 @@ const confirmOrder = async (req, res) => {
     }
 
     try {
-        // Pull pending details from FLYGATEDetails (latest reqType=0 row for this order)
-        const pending = await prisma.fLYGATEDetails.findFirst({
+        // ── 0a. Guard: already paid? ────────────────────────────────────────
+        // Check FlygateTransactions for a successful payment for this orderId
+        const existingTrn = await prisma.flygateTransactions.findFirst({
+            where: { orderId: orderid, status: 1, isRefund: 0 },
+            orderBy: { code: 'desc' }
+        });
+        if (existingTrn) {
+            return res.status(409).json({
+                status: "AlreadyPaid",
+                message: `Order ${orderid} has already been paid`,
+                reference: existingTrn.bankRefNo,
+                paidAt:    existingTrn.processedDate,
+                amount:    existingTrn.amount,
+                traceNumber: existingTrn.traceNumber
+            });
+        }
+
+        // ── 0b. Get pending order details ───────────────────────────────────
+        // First try local DB (written by validatePNR)
+        let pending = await prisma.fLYGATEDetails.findFirst({
             where: { orderId: orderid, reqType: 0 },
             orderBy: { auto: 'desc' }
         });
 
-        const amount = Number(req.body.amount ?? pending?.amount ?? 0);
+        // If not found locally, re-call FlyGate GetOrder to validate live
+        if (!pending) {
+            const getOrderParams = { OrderId: orderid, shortCode: shortcode };
+            await logFlyGateReqRes(orderid, 1, getOrderParams);
+
+            const revalidate = await axios.get(`${url}/Enat/api/V1.0/Enat/GetOrder`, {
+                params: getOrderParams,
+                httpsAgent,
+                auth: { username: AIRLINE_USER, password: AIRLINE_PASS },
+                validateStatus: (s) => s >= 200 && s < 600
+            });
+
+            logJsonBlock("FLYGATE GetOrder RE-VALIDATE RESPONSE", revalidate.data);
+            await logFlyGateReqRes(orderid, 2, revalidate.data);
+
+            const reAmount     = Number(revalidate.data?.Amount ?? revalidate.data?.amount ?? 0);
+            const reStatusDesc = revalidate.data?.statusCodeResponseDescription || revalidate.data?.message || "";
+            const reIsValid    = reStatusDesc === "Success" || reAmount > 0;
+
+            if (!reIsValid) {
+                return res.status(404).json({
+                    status:  "Error",
+                    message: `Invalid orderId: ${orderid} — order not found or expired`
+                });
+            }
+
+            // Build a synthetic pending object from the live response
+            pending = {
+                amount:       reAmount,
+                customerName: revalidate.data?.CustomerName || revalidate.data?.customerName || "",
+                pnr:          revalidate.data?.PNR          || revalidate.data?.pnr          || "",
+                currency:     revalidate.data?.Currency     || revalidate.data?.currency     || "ETB"
+            };
+
+            // Persist it so next call hits the DB
+            await writeFlygateAudit({
+                orderId: orderid, reqType: 0,
+                payload: revalidate.data, responseCode: "200",
+                resultDesc: "GetOrder Re-validated - Pending",
+                cbsRefNo: "", amount: reAmount, traceNumber: "",
+                orderStatusCode: 0, isRefund: false,
+                customerName: pending.customerName,
+                pnr:          pending.pnr,
+                currency:     pending.currency
+            });
+        }
+
+        const amount       = Number(req.body.amount ?? pending?.amount ?? 0);
         const customerName = bodyCustomerName || pending?.customerName || "Flygate Customer";
-        const orderPnr = pnr || pending?.pnr || "";
-        const currency = bodyCurrency || pending?.currency || "ETB";
+        const orderPnr     = pnr || pending?.pnr || "";
+        const currency     = bodyCurrency || pending?.currency || "ETB";
 
         if (!amount || amount <= 0) {
             return res.status(400).json({ status: "Error", message: "Valid amount is required" });
