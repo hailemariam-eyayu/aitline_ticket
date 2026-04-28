@@ -54,8 +54,12 @@ const queryRideAccount = async (req, res) => {
 
         logJson("RIDE QUERY RESPONSE", rideRes.data);
 
-        const isActive = rideRes.data?.status === "active";
-        const isFound  = rideRes.status < 400 && rideRes.data?.phone;
+        // Ride returns 200 with { message: "Bad Authorization" } on auth failure
+        // or non-200 status — surface the real message in both cases
+        const rideMessage = rideRes.data?.message || "";
+        const isBadAuth   = rideRes.status === 401 || rideMessage.toLowerCase().includes("bad auth") || rideMessage.toLowerCase().includes("unauthorized");
+        const isFound     = rideRes.status < 400 && rideRes.data?.phone && !isBadAuth;
+        const isActive    = isFound && rideRes.data?.status === "active";
 
         // Persist audit row
         const audit = await prisma.rideTransaction.create({
@@ -70,10 +74,20 @@ const queryRideAccount = async (req, res) => {
 
         auditId = audit?.id ?? null;
 
+        if (isBadAuth) {
+            return res.status(401).json({
+                status:  "Error",
+                message: `Ride API authentication failed: ${rideMessage}`,
+                data:    rideRes.data,
+                auditId
+            });
+        }
+
         if (!isFound) {
             return res.status(404).json({
                 status:  "Error",
-                message: "Phone number not found on Ride",
+                message: rideMessage || "Phone number not found on Ride",
+                data:    rideRes.data,
                 auditId
             });
         }
