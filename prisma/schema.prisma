@@ -156,6 +156,34 @@ model Transactions {
 
 // ─── Refund ledger ────────────────────────────────────────────────────────────
 
+// ─── Generic CBS transfer log ─────────────────────────────────────────────────
+
+/// Audit log for every generic CBS CreateTransaction call
+/// channel: TELEBIRR | AIRLINE | BILL | MPESA | OTHER
+model CbsTransfer {
+  id            Int      @id @default(autoincrement())
+  channel       String   @map("Channel") @db.VarChar(30)
+  prd           String   @map("PRD") @db.VarChar(20)
+  drAcNo        String   @map("DrAcNo") @db.VarChar(50)
+  crAcNo        String   @map("CrAcNo") @db.VarChar(50)
+  drBranch      String?  @map("DrBranch") @db.VarChar(10)
+  crBranch      String?  @map("CrBranch") @db.VarChar(10)
+  amount        Decimal  @map("Amount") @db.Money
+  currency      String   @default("ETB") @map("Currency") @db.VarChar(5)
+  narrative     String?  @map("Narrative") @db.VarChar(500)
+  referenceId   String?  @map("ReferenceId") @db.VarChar(100)  // caller's own ref (PNR, bill no, phone…)
+  traceNumber   String   @map("TraceNumber") @db.VarChar(150)
+  cbsRefNo      String?  @map("CBSRefNo") @db.VarChar(50)      // FCCREF from CBS on success
+  status        Int      @map("Status") @db.SmallInt            // 1=success, 0=failed
+  errorCode     String?  @map("ErrorCode") @db.VarChar(50)
+  errorDesc     String?  @map("ErrorDesc") @db.VarChar(500)
+  requestXml    String?  @map("RequestXml") @db.Text
+  responseXml   String?  @map("ResponseXml") @db.Text
+  entryTime     DateTime @default(now()) @map("EntryTime") @db.Timestamp
+
+  @@map("CbsTransfer")
+}
+
 model RefundDetails {
   auto        Int      @id @default(autoincrement()) @map("Auto")
   receiveDate DateTime @default(now()) @map("ReceiveDate") @db.Timestamp
