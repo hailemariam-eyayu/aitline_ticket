@@ -1,7 +1,6 @@
 const CBS_USER = process.env.cbs_user || "ADCUSER";
 const CBS_SOURCE = process.env.cbs_source || "ADC";
 const CBS_BRANCH = process.env.cbs_branch || "001";
-const CBS_TXN_ACCOUNT = process.env.cbs_txn_account || "0011111015113001";
 const CBS_OFFSET_BRANCH = process.env.cbs_offset_branch || "046";
 const CBS_OFFSET_ACCOUNT = process.env.cbs_offset_account || "0461112216017001";
 
@@ -18,9 +17,19 @@ const normalizeAmount = (amount) => {
     return numeric.toFixed(2);
 };
 
-const buildCreateTransactionXml = ({ amount, orderid, beneficiaryAcno }) => {
+/**
+ * Build the CBS CreateTransaction SOAP envelope.
+ *
+ * @param {object} params
+ * @param {number|string} params.amount        - Transaction amount
+ * @param {string}        params.orderid       - FlyGate order ID (used as narrative)
+ * @param {string}        params.beneficiaryAcno - Debit account (CBS_TXN_ACCOUNT) from frontend
+ * @param {string}        [params.branchCode]  - Branch code from frontend (overrides env default)
+ */
+const buildCreateTransactionXml = ({ amount, orderid, beneficiaryAcno, branchCode }) => {
     const txnAmount = normalizeAmount(amount);
-    const narrative = "Air line";
+    const narrative = `Airline ticket payment - ${orderid}`;
+    const txnBranch = branchCode || CBS_BRANCH;
 
     return {
         xml: `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.com/service/FCUBSRTService">
@@ -31,15 +40,15 @@ const buildCreateTransactionXml = ({ amount, orderid, beneficiaryAcno }) => {
             <fcub:SOURCE>${CBS_SOURCE}</fcub:SOURCE>
             <fcub:UBSCOMP>FCUBS</fcub:UBSCOMP>
             <fcub:USERID>${CBS_USER}</fcub:USERID>
-            <fcub:BRANCH>${CBS_BRANCH}</fcub:BRANCH>
+            <fcub:BRANCH>${txnBranch}</fcub:BRANCH>
             <fcub:SERVICE>FCUBSRTService</fcub:SERVICE>
             <fcub:OPERATION>CreateTransaction</fcub:OPERATION>
          </fcub:FCUBS_HEADER>
          <fcub:FCUBS_BODY>
             <fcub:Transaction-Details>
                <fcub:PRD>ATAD</fcub:PRD>
-               <fcub:BRN>${CBS_BRANCH}</fcub:BRN>
-               <fcub:TXNACC>${CBS_TXN_ACCOUNT}</fcub:TXNACC>
+               <fcub:BRN>${txnBranch}</fcub:BRN>
+               <fcub:TXNACC>${beneficiaryAcno}</fcub:TXNACC>
                <fcub:TXNCCY>ETB</fcub:TXNCCY>
                <fcub:TXNAMT>${txnAmount}</fcub:TXNAMT>
                <fcub:OFFSETBRN>${CBS_OFFSET_BRANCH}</fcub:OFFSETBRN>

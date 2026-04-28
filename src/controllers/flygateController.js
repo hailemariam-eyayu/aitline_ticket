@@ -15,9 +15,117 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 const shortcode = process.env.shortCodeT || 526341;
 const url = process.env.BASE_URL;
-
 const AIRLINE_USER = process.env.AIRLINE_USER || 'EnatBankTest@ethiopianairlines.com';
 const AIRLINE_PASS = process.env.AIRLINE_PASS || 'EnatBankTest@!23';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const logCbsXml = (label, xml) =>
+    console.log(`\n========== ${label} ==========\n${xml}\n========== END ${label} ==========\n`);
+
+const logJsonBlock = (label, data) =>
+    console.log(`\n========== ${label} ==========\n${JSON.stringify(data, null, 2)}\n========== END ${label} ==========\n`);
+
+/**
+ * Log a raw JSON payload to FlyGateReqRes.
+ * type: 1 = request, 2 = response
+ */
+const logFlyGateReqRes = async (orderId, type, data) => {
+    try {
+        await prisma.flyGateReqRes.create({
+            data: {
+                orderId: String(orderId || "").slice(0, 20),
+                type,
+                data: typeof data === "string" ? JSON.parse(data) : data
+            }
+        });
+    } catch (e) {
+        console.error("FlyGateReqRes log failed:", e.message);
+    }
+};
+
+/**
+ * Log a raw XML payload to CbsReqRes.
+ * type: 1 = request, 2 = response
+ */
+const logCbsReqRes = async (orderId, type, xml) => {
+    try {
+        await prisma.cbsReqRes.create({
+            data: {
+                orderId: String(orderId || "").slice(0, 20),
+                type,
+                data: String(xml || "")
+            }
+        });
+    } catch (e) {
+        console.error("CbsReqRes log failed:", e.message);
+    }
+};
+
+/**
+ * Write a step audit row to FLYGATEDetails.
+ * reqType: 1=CBS req, 2=CBS resp, 3=FlyGate confirm resp, 4=refund
+ */
+const writeFlygateAudit = async ({
+    orderId, reqType, payload, responseCode, resultDesc,
+    cbsRefNo, amount, traceNumber, orderStatusCode, isRefund,
+    customerName, pnr, currency
+}) => {
+    try {
+        await prisma.fLYGATEDetails.create({
+            data: {
+                orderId: String(orderId || "").slice(0, 20),
+                reqType,
+                respCode: String(responseCode ?? "").slice(0, 10),
+                respResult: typeof payload === "string" ? payload : JSON.stringify(payload),
+                amount: Number(amount || 0),
+                traceNumber: String(traceNumber || "").slice(0, 50),
+                orderStatusCode: Number(orderStatusCode ?? 0),
+                resultDesc: String(resultDesc || "").slice(0, 100),
+                cbsRefNo: String(cbsRefNo || "").slice(0, 50),
+                isRefund: isRefund ? 1 : 0,
+                customerName: customerName ? String(customerName).slice(0, 500) : null,
+                pnr: pnr ? String(pnr).slice(0, 25) : null,
+                currency: currency ? String(currency).slice(0, 5) : null
+            }
+        });
+    } catch (e) {
+        console.error("FLYGATEDetails write failed:", e.message);
+    }
+};
+
+// ─── CBS SOAP call ────────────────────────────────────────────────────────────
+
+const CBS_RT_URL = process.env.cbs_endpoint || process.env.cbs_url || "http://10.1.22.100:7003/FCUBSRTService/FCUBSRTService";
+
+const callCbs = async (soapRequestXml, soapAction) => {
+    logCbsXml(`CBS REQUEST [${soapAction}]`, soapRequestXml);
+    const response = await axios.post(CBS_RT_URL, soapRequestXml, {
+        headers: {
+            'Content-Type': 'text/xml;charset=utf-8',
+            SOAPAction: soapAction
+        },
+        httpsAgent,
+        validateStatus: (s) => s >= 200 && s < 600
+    });
+    const responseXml = response.data || "";
+    logCbsXml(`CBS RESPONSE [${soapAction}]`, responseXml);
+
+    const faultString = extractXmlTag(responseXml, "faultstring");
+    if (faultString) {
+        const err = new Error(`CBS Fault: ${faultString}`);
+        err.cbsRawData = responseXml;
+        throw err;
+    }
+    if (response.status >= 400) {
+        const err = new Error(`CBS HTTP ${response.status}`);
+        err.cbsRawData = responseXml;
+        throw err;
+    }
+    return responseXml;
+};
+
+// ─── validatePNR ─────────────────────────────────────────────────────────────
 
 const validatePNR = async (req, res) => {
     const { orderid } = req.body;
@@ -26,45 +134,58 @@ const validatePNR = async (req, res) => {
     }
 
     try {
-        const getOrderParams = {
-            OrderId: orderid,
-            shortCode: shortcode
-        };
+        const getOrderParams = { OrderId: orderid, shortCode: shortcode };
+
+        // Log the outgoing request
+        await logFlyGateReqRes(orderid, 1, getOrderParams);
 
         const response = await axios.get(`${url}/Enat/api/V1.0/Enat/GetOrder`, {
             params: getOrderParams,
             httpsAgent,
-            auth: {
-                username: AIRLINE_USER,
-                password: AIRLINE_PASS
-            },
-            validateStatus: (status) => status >= 200 && status < 600
+            auth: { username: AIRLINE_USER, password: AIRLINE_PASS },
+            validateStatus: (s) => s >= 200 && s < 600
         });
 
-        const amount = Number(response.data?.Amount ?? response.data?.amount ?? 0);
-        const customerName = response.data?.CustomerName || response.data?.customerName || "Unknown";
+        logJsonBlock("FLYGATE GetOrder RESPONSE", response.data);
 
-        if (response.data && (response.data.statusCodeResponseDescription === "Success" || amount > 0)) {
-            let savedOrder = null;
-            try {
-                savedOrder = await prisma.fLYGATEDetails.upsert({
-                    where: { orderId: orderid },
-                    update: { amount, customerName },
-                    create: { orderId: orderid, amount, customerName }
-                });
-            } catch (dbError) {
-                console.error("PendingOrder upsert failed:", dbError.message);
-            }
+        // Log the incoming response
+        await logFlyGateReqRes(orderid, 2, response.data);
+
+        const amount = Number(response.data?.Amount ?? response.data?.amount ?? 0);
+        const customerName = response.data?.CustomerName || response.data?.customerName || "";
+        const pnr = response.data?.PNR || response.data?.pnr || "";
+        const currency = response.data?.Currency || response.data?.currency || "ETB";
+        const statusDesc = response.data?.statusCodeResponseDescription || response.data?.message || "";
+
+        const isSuccess = statusDesc === "Success" || amount > 0;
+
+        if (isSuccess) {
+            // Store pending order details in FLYGATEDetails (reqType=0 = pending/validate)
+            await writeFlygateAudit({
+                orderId: orderid,
+                reqType: 0,
+                payload: response.data,
+                responseCode: "200",
+                resultDesc: "GetOrder Success - Pending",
+                cbsRefNo: "",
+                amount,
+                traceNumber: "",
+                orderStatusCode: 0,
+                isRefund: false,
+                customerName,
+                pnr,
+                currency
+            });
 
             return res.status(200).json({
                 success: true,
-                data: savedOrder || { orderId: orderid, amount, customerName }
+                data: { orderId: orderid, amount, customerName, pnr, currency }
             });
         }
 
         return res.status(404).json({
             success: false,
-            message: response.data?.statusCodeResponseDescription || response.data?.message || "Order not found or expired",
+            message: statusDesc || "Order not found or expired",
             errorCode: response.data?.errorCode,
             orderId: response.data?.orderId || orderid,
             rawResponse: response.data
@@ -79,95 +200,55 @@ const validatePNR = async (req, res) => {
     }
 };
 
-
-// Configuration from your Web.config
-const CBS_URL = process.env.cbs_url || "http://10.1.22.100:7003/FCUBSRTService/FCUBSRTService?WSDL";
-const CBS_RT_URL = process.env.cbs_endpoint || CBS_URL;
-const logCbsXml = (label, xml) => {
-    console.log(`\n========== ${label} ==========\n${xml}\n========== END ${label} ==========\n`);
-};
-const logJsonBlock = (label, data) => {
-    console.log(`\n========== ${label} ==========\n${JSON.stringify(data, null, 2)}\n========== END ${label} ==========\n`);
-};
-
-const callCbs = async (soapRequestXml, soapAction, endpoint = CBS_RT_URL) => {
-    logCbsXml(`CBS REQUEST ${soapAction}`, soapRequestXml);
-    const response = await axios.post(endpoint, soapRequestXml, {
-        headers: {
-            'Content-Type': 'text/xml;charset=utf-8',
-            SOAPAction: soapAction
-        },
-        httpsAgent,
-        validateStatus: (status) => status >= 200 && status < 600
-    });
-    const responseXml = response.data || "";
-    logCbsXml(`CBS RESPONSE ${soapAction}`, responseXml);
-
-    const faultString = extractXmlTag(responseXml, "faultstring");
-    if (faultString) {
-        const error = new Error(`CBS Fault: ${faultString}`);
-        error.cbsRawData = responseXml;
-        throw error;
-    }
-    if (response.status >= 400) {
-        const error = new Error(`CBS HTTP ${response.status}`);
-        error.cbsRawData = responseXml;
-        throw error;
-    }
-    return responseXml;
-};
-
-const writeFlygateAudit = async ({ orderId, reqType, payload, responseCode, resultDesc, cbsRefNo, amount, traceNumber, orderStatusCode, isRefund }) => {
-    try {
-        await prisma.fLYGATEDetails.create({
-            data: {
-                orderId: String(orderId).slice(0, 20),
-                reqType,
-                respCode: String(responseCode ?? ""),
-                respResult: typeof payload === "string" ? payload : JSON.stringify(payload),
-                amount: Number(amount || 0),
-                traceNumber: String(traceNumber || "").slice(0, 50),
-                orderStatusCode: Number(orderStatusCode ?? 0),
-                resultDesc: String(resultDesc || "").slice(0, 100),
-                cbsRefNo: String(cbsRefNo || "").slice(0, 50),
-                isRefund: isRefund ? 1 : 0
-            }
-        });
-    } catch (error) {
-        console.error("FLYGATEDetails write failed:", error.message);
-    }
-};
+// ─── confirmOrder ─────────────────────────────────────────────────────────────
 
 const confirmOrder = async (req, res) => {
-    const { orderid, beneficiaryAcno, remark } = req.body;
+    const { orderid, beneficiaryAcno, branchCode, remark, pnr, customerName: bodyCustomerName, currency: bodyCurrency } = req.body;
+
     if (!orderid || !beneficiaryAcno) {
         return res.status(400).json({ status: "Error", message: "orderid and beneficiaryAcno are required" });
     }
 
     try {
-        const pending = await prisma.pendingOrder.findUnique({ where: { orderId: orderid } }).catch(() => null);
+        // Pull pending details from FLYGATEDetails (latest reqType=0 row for this order)
+        const pending = await prisma.fLYGATEDetails.findFirst({
+            where: { orderId: orderid, reqType: 0 },
+            orderBy: { auto: 'desc' }
+        });
+
         const amount = Number(req.body.amount ?? pending?.amount ?? 0);
-        const customerName = req.body.customerName || pending?.customerName || "Flygate Customer";
+        const customerName = bodyCustomerName || pending?.customerName || "Flygate Customer";
+        const orderPnr = pnr || pending?.pnr || "";
+        const currency = bodyCurrency || pending?.currency || "ETB";
+
         if (!amount || amount <= 0) {
             return res.status(400).json({ status: "Error", message: "Valid amount is required" });
         }
 
         const finalTraceNumber = `TRC${Date.now()}`;
-        const { xml: soapRequestXml } = buildCreateTransactionXml({ amount, orderid, beneficiaryAcno });
-        await writeFlygateAudit({
-            orderId: orderid,
-            reqType: 1,
-            payload: soapRequestXml,
-            responseCode: "REQ",
-            resultDesc: "CBS CreateTransaction Request",
-            cbsRefNo: "",
+
+        // ── 1. Build & log CBS request ──────────────────────────────────────
+        const { xml: soapRequestXml } = buildCreateTransactionXml({
             amount,
-            traceNumber: finalTraceNumber,
-            orderStatusCode: 0,
-            isRefund: false
+            orderid,
+            beneficiaryAcno,   // debit account from frontend
+            branchCode         // branch from frontend
         });
 
+        await logCbsReqRes(orderid, 1, soapRequestXml);
+        await writeFlygateAudit({
+            orderId: orderid, reqType: 1,
+            payload: soapRequestXml, responseCode: "REQ",
+            resultDesc: "CBS CreateTransaction Request",
+            cbsRefNo: "", amount, traceNumber: finalTraceNumber,
+            orderStatusCode: 0, isRefund: false,
+            customerName, pnr: orderPnr, currency
+        });
+
+        // ── 2. Call CBS ─────────────────────────────────────────────────────
         const cbsResponseXml = await callCbs(soapRequestXml, 'CREATETRANSACTION_FSFS_REQ');
+        await logCbsReqRes(orderid, 2, cbsResponseXml);
+
         const isSuccess = cbsResponseXml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
         const cbsFccRef = extractXmlTag(cbsResponseXml, "FCCREF");
         const cbsXref = extractXmlTag(cbsResponseXml, "XREF");
@@ -175,77 +256,120 @@ const confirmOrder = async (req, res) => {
         const finalReferenceNumber = cbsFccRef || cbsXref;
 
         await writeFlygateAudit({
-            orderId: orderid,
-            reqType: 2,
+            orderId: orderid, reqType: 2,
             payload: cbsResponseXml,
             responseCode: isSuccess ? "SUCCESS" : "FAILURE",
             resultDesc: isSuccess ? "CBS CreateTransaction Success" : (cbsErrorDesc || "CBS transaction failed"),
-            cbsRefNo: finalReferenceNumber,
-            amount,
-            traceNumber: finalTraceNumber,
-            orderStatusCode: isSuccess ? 1 : 0,
-            isRefund: false
+            cbsRefNo: finalReferenceNumber || "", amount, traceNumber: finalTraceNumber,
+            orderStatusCode: isSuccess ? 1 : 0, isRefund: false,
+            customerName, pnr: orderPnr, currency
         });
 
         if (!isSuccess) {
-            const error = new Error(`CBS Error: ${cbsErrorDesc || "Transaction failed"}`);
-            error.cbsRawData = cbsResponseXml;
-            error.cbsRequestXml = soapRequestXml;
-            throw error;
+            const err = new Error(`CBS Error: ${cbsErrorDesc || "Transaction failed"}`);
+            err.cbsRawData = cbsResponseXml;
+            err.cbsRequestXml = soapRequestXml;
+            throw err;
         }
         if (!finalReferenceNumber) {
-            const error = new Error("CBS Error: Missing FCCREF/XREF in successful response");
-            error.cbsRawData = cbsResponseXml;
-            error.cbsRequestXml = soapRequestXml;
-            throw error;
+            const err = new Error("CBS Error: Missing FCCREF/XREF in successful response");
+            err.cbsRawData = cbsResponseXml;
+            err.cbsRequestXml = soapRequestXml;
+            throw err;
         }
 
+        // ── 3. Confirm with FlyGate ─────────────────────────────────────────
         const flyGatePayload = {
             OrderId: orderid,
-            shortCode: process.env.shortCodeT,
+            shortCode: shortcode,
             Amount: amount,
-            Currency: "ETB",
+            Currency: currency,
             status: 1,
             remark: remark || `Successfully Paid for order: ${orderid}`,
             TraceNumber: finalTraceNumber,
             ReferenceNumber: finalReferenceNumber,
-            PayerCustomerName: customerName || "Enat Customer",
+            PayerCustomerName: customerName,
             PaidAccountNumber: beneficiaryAcno
         };
 
-        logJsonBlock("FLYGATE CONFIRM REQUEST", flyGatePayload);
+        logJsonBlock("FLYGATE ConfirmOrder REQUEST", flyGatePayload);
+        await logFlyGateReqRes(orderid, 1, flyGatePayload);
+
         const flyGateResponse = await axios.post(
             `${url}/Enat/api/V1.0/Enat/ConfirmOrder`,
             flyGatePayload,
             {
                 httpsAgent,
-                auth: {
-                    username: AIRLINE_USER,
-                    password: AIRLINE_PASS
-                },
-                validateStatus: (status) => status >= 200 && status < 600
+                auth: { username: AIRLINE_USER, password: AIRLINE_PASS },
+                validateStatus: (s) => s >= 200 && s < 600
             }
         );
-        logJsonBlock("FLYGATE CONFIRM RESPONSE", flyGateResponse.data);
+        logJsonBlock("FLYGATE ConfirmOrder RESPONSE", flyGateResponse.data);
+        await logFlyGateReqRes(orderid, 2, flyGateResponse.data);
 
         if (flyGateResponse.status >= 400 || flyGateResponse.data?.statusCodeResponseDescription === "Error") {
-            const error = new Error(flyGateResponse.data?.message || "Flygate confirm failed");
-            error.httpStatus = flyGateResponse.status;
-            error.upstreamData = flyGateResponse.data;
-            throw error;
+            const err = new Error(flyGateResponse.data?.message || "Flygate confirm failed");
+            err.httpStatus = flyGateResponse.status;
+            err.upstreamData = flyGateResponse.data;
+            throw err;
         }
+
+        // ── 4. Audit FlyGate confirm success ────────────────────────────────
         await writeFlygateAudit({
-            orderId: orderid,
-            reqType: 3,
-            payload: flyGateResponse.data,
-            responseCode: "200",
+            orderId: orderid, reqType: 3,
+            payload: flyGateResponse.data, responseCode: "200",
             resultDesc: "Flygate ConfirmOrder Success",
-            cbsRefNo: finalReferenceNumber,
-            amount,
-            traceNumber: finalTraceNumber,
-            orderStatusCode: 1,
-            isRefund: false
+            cbsRefNo: finalReferenceNumber, amount, traceNumber: finalTraceNumber,
+            orderStatusCode: 1, isRefund: false,
+            customerName, pnr: orderPnr, currency
         });
+
+        // ── 5. Write FlygateTransactions (confirmed record) ─────────────────
+        await prisma.flygateTransactions.create({
+            data: {
+                orderId: String(orderid).slice(0, 20),
+                trnDate: new Date(),
+                drAcNo: String(beneficiaryAcno).slice(0, 50),
+                crAcNo: String(CBS_OFFSET_ACCOUNT).slice(0, 50),
+                customerName: String(customerName).slice(0, 500),
+                pnr: orderPnr ? String(orderPnr).slice(0, 25) : null,
+                amount: Number(amount),
+                currency: String(currency).slice(0, 5),
+                remarks: remark ? String(remark).slice(0, 500) : `Payment for order ${orderid}`,
+                status: 1,
+                traceNumber: String(finalTraceNumber).slice(0, 150),
+                bankRefNo: String(finalReferenceNumber).slice(0, 500),
+                processedDate: new Date(),
+                channel: "API",
+                isRefund: 0,
+                entryDate: new Date()
+            }
+        }).catch(e => console.error("FlygateTransactions write failed:", e.message));
+
+        // ── 6. Write Transactions (CBS journal) ─────────────────────────────
+        await prisma.transactions.create({
+            data: {
+                orderId: String(orderid).slice(0, 20),
+                pnr: orderPnr ? String(orderPnr).slice(0, 25) : null,
+                trnDate: new Date(),
+                processedTime: new Date(),
+                drAcNo: String(beneficiaryAcno).slice(0, 50),
+                crAcNo: String(CBS_OFFSET_ACCOUNT).slice(0, 50),
+                branchCode: branchCode ? String(branchCode).slice(0, 10) : null,
+                amount: Number(amount),
+                currencyCode: String(currency).slice(0, 5),
+                customerName: String(customerName).slice(0, 500),
+                cbsRefNo: String(finalReferenceNumber).slice(0, 50),
+                traceNumber: String(finalTraceNumber).slice(0, 150),
+                uniqueId: `${orderid}-${finalTraceNumber}`.slice(0, 50),
+                crDr: "DEBIT",
+                remarks: remark ? String(remark).slice(0, 500) : `Airline payment ${orderid}`,
+                particulars: `FlyGate order ${orderid}`,
+                status: 1,
+                channel: "API",
+                entryTime: new Date()
+            }
+        }).catch(e => console.error("Transactions write failed:", e.message));
 
         return res.json({
             status: "Success",
@@ -264,117 +388,137 @@ const confirmOrder = async (req, res) => {
     }
 };
 
+// ─── refundRequest ────────────────────────────────────────────────────────────
 
 const refundRequest = async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) {
-        return res.status(401).json({ status: "Error", message: "Authorization header missing"  });
+        return res.status(401).json({ status: "Error", message: "Authorization header missing" });
     }
-
     const encoded = authHeader.split(' ')[1];
     if (!encoded) {
         return res.status(401).json({ status: "Error", message: "Invalid authorization format" });
     }
     const [user, pass] = Buffer.from(encoded, 'base64').toString().split(':');
-
     if (user !== AIRLINE_USER || pass !== AIRLINE_PASS) {
         return res.status(401).json({ status: "Error", message: "Invalid credentials" });
     }
 
-    const { shortCode, orderId, firstName, lastName, amount, currency, ReferenceNumber, refundFOP, refundReferenceCode } = req.body;
+    const {
+        shortCode, orderId, firstName, lastName,
+        amount, currency, ReferenceNumber,
+        refundFOP, refundReferenceCode
+    } = req.body;
 
     try {
+        // ── 1. Build & log CBS reversal request ─────────────────────────────
         const soapRequestXml = buildReversalXml(ReferenceNumber);
+        await logCbsReqRes(orderId, 1, soapRequestXml);
+
+        // ── 2. Call CBS reversal ─────────────────────────────────────────────
         const cbsResponseXml = await callCbs(soapRequestXml, 'REVERSETRANSACTION_FSFS_REQ');
+        await logCbsReqRes(orderId, 2, cbsResponseXml);
+
         const isSuccess = cbsResponseXml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
         const refundError = extractXmlTag(cbsResponseXml, "EDESC");
         const reverseRef = extractXmlTag(cbsResponseXml, "FCCREF") || ReferenceNumber;
 
+        // ── 3. Audit CBS reversal ────────────────────────────────────────────
         await writeFlygateAudit({
-            orderId,
-            reqType: 4,
+            orderId, reqType: 4,
             payload: cbsResponseXml,
             responseCode: isSuccess ? "SUCCESS" : "FAILURE",
             resultDesc: isSuccess ? "CBS Reversal Success" : (refundError || "CBS reversal failed"),
-            cbsRefNo: reverseRef,
-            amount: Number(amount || 0),
-            traceNumber: "",
-            orderStatusCode: isSuccess ? 1 : 0,
-            isRefund: true
+            cbsRefNo: reverseRef, amount: Number(amount || 0),
+            traceNumber: "", orderStatusCode: isSuccess ? 1 : 0, isRefund: true
         });
 
-        await prisma.refundLedger.create({
+        // ── 4. Write RefundLedger ────────────────────────────────────────────
+        await prisma.refundDetails.create({
             data: {
                 receiveDate: new Date(),
-                shortCode: String(shortCode),
-                orderId: String(orderId),
+                shortCode: String(shortCode || "").slice(0, 10),
+                orderId: String(orderId || "").slice(0, 20),
                 amount: Number(amount || 0),
-                cbsRefNumber: String(ReferenceNumber || ""),
-                flyRefundCode: String(refundReferenceCode || ""),
+                cbsRefNumber: String(ReferenceNumber || "").slice(0, 50),
+                flyRefundCode: String(refundReferenceCode || "").slice(0, 30),
                 acknowledgeStatus: 1,
                 acknowledgDesc: "Received",
                 refundStatus: isSuccess ? 1 : 0,
-                refundCbsRef: String(reverseRef || ""),
+                refundCbsRef: String(reverseRef || "").slice(0, 50),
                 refundDate: isSuccess ? new Date() : null,
                 refundDesc: isSuccess ? "Successfully Refunded" : (refundError || "Refund failed"),
                 confirmRefundStatus: isSuccess ? 1 : 0,
                 confirmRefundDate: isSuccess ? new Date() : null,
                 status: isSuccess ? 1 : 0
             }
-        }).catch(e => console.error("RefundLedger write failed:", e.message));
+        }).catch(e => console.error("RefundDetails write failed:", e.message));
 
-        if (isSuccess) {
-            const flyGatePayload = {
-                shortCode: shortCode,
-                OrderId: orderId,
-                Amount: amount,
-                Currency: currency,
-                RefundReferenceCode: refundReferenceCode,
-                bankRefundReference: ReferenceNumber,
-                refundDate: new Date().toISOString().split('T')[0],
-                RefundAccountNumber: req.body.RefundAccountNumber || CBS_OFFSET_ACCOUNT,
-                AccountHolderName: `${firstName} ${lastName}`,
-                refundFOP: refundFOP,
-                status: 1,
-                remark: "Successfully Refunded",
-            };
-
-            logJsonBlock("FLYGATE REFUND REQUEST", flyGatePayload);
-            const flyGateResponse = await axios.post(
-                `${url}/Enat/api/V1.0/Enat/ConfirmRefund`,
-                flyGatePayload,
-                {
-                    httpsAgent,
-                    auth: {
-                        username: AIRLINE_USER,
-                        password: AIRLINE_PASS
-                    },
-                    validateStatus: (status) => status >= 200 && status < 600
-                }
-            );
-            logJsonBlock("FLYGATE REFUND RESPONSE", flyGateResponse.data);
-
-            if (flyGateResponse.status >= 400 || flyGateResponse.data?.statusCodeResponseDescription === "Error") {
-                return res.status(flyGateResponse.status || 400).json({
-                    status: "Error",
-                    message: flyGateResponse.data?.message || "Flygate refund failed",
-                    rawData: flyGateResponse.data
-                });
-            }
-
-            return res.status(200).json({
-                "ResponseCode": 1,
-                "success": "Success",
-                "ResponseCodeDescription": "Successfully accepted Refund request",
-                "data": flyGateResponse.data
-            });
-        } else {
+        if (!isSuccess) {
             return res.status(400).json({
-                "ResponseCode": 0,
-                "ResponseCodeDescription": refundError || `There is no transaction associated with Reference: ${ReferenceNumber}`,
-                "Status": "Error"
+                ResponseCode: 0,
+                ResponseCodeDescription: refundError || `No transaction found for reference: ${ReferenceNumber}`,
+                Status: "Error"
             });
         }
+
+        // ── 5. Confirm refund with FlyGate ───────────────────────────────────
+        const flyGatePayload = {
+            shortCode,
+            OrderId: orderId,
+            Amount: amount,
+            Currency: currency,
+            RefundReferenceCode: refundReferenceCode,
+            bankRefundReference: ReferenceNumber,
+            refundDate: new Date().toISOString().split('T')[0],
+            RefundAccountNumber: req.body.RefundAccountNumber || CBS_OFFSET_ACCOUNT,
+            AccountHolderName: `${firstName || ""} ${lastName || ""}`.trim(),
+            refundFOP,
+            status: 1,
+            remark: "Successfully Refunded"
+        };
+
+        logJsonBlock("FLYGATE ConfirmRefund REQUEST", flyGatePayload);
+        await logFlyGateReqRes(orderId, 1, flyGatePayload);
+
+        const flyGateResponse = await axios.post(
+            `${url}/Enat/api/V1.0/Enat/ConfirmRefund`,
+            flyGatePayload,
+            {
+                httpsAgent,
+                auth: { username: AIRLINE_USER, password: AIRLINE_PASS },
+                validateStatus: (s) => s >= 200 && s < 600
+            }
+        );
+        logJsonBlock("FLYGATE ConfirmRefund RESPONSE", flyGateResponse.data);
+        await logFlyGateReqRes(orderId, 2, flyGateResponse.data);
+
+        if (flyGateResponse.status >= 400 || flyGateResponse.data?.statusCodeResponseDescription === "Error") {
+            return res.status(flyGateResponse.status || 400).json({
+                status: "Error",
+                message: flyGateResponse.data?.message || "Flygate refund confirmation failed",
+                rawData: flyGateResponse.data
+            });
+        }
+
+        // ── 6. Update FlygateTransactions refund fields ──────────────────────
+        await prisma.flygateTransactions.updateMany({
+            where: { bankRefNo: String(ReferenceNumber) },
+            data: {
+                isRefund: 1,
+                refundStatus: 1,
+                refundReferenceCode: String(refundReferenceCode || "").slice(0, 250),
+                orgBankRefNo: String(ReferenceNumber || "").slice(0, 500)
+            }
+        }).catch(e => console.error("FlygateTransactions refund update failed:", e.message));
+
+        return res.status(200).json({
+            ResponseCode: 1,
+            success: "Success",
+            ResponseCodeDescription: "Successfully accepted Refund request",
+            data: flyGateResponse.data
+        });
+
     } catch (error) {
         return res.status(error.httpStatus || 500).json({
             status: "Error",
@@ -383,6 +527,5 @@ const refundRequest = async (req, res) => {
         });
     }
 };
-
 
 export { validatePNR, confirmOrder, refundRequest };
