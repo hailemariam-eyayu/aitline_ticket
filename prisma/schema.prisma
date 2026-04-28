@@ -11,53 +11,7 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id             String          @id @default(uuid())
-  name           String
-  email          String          @unique
-  password       String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  //Relationships
-  movies         Movie[]         @relation("MovieCreator")
-  watchlistItems WatchlistItem[]
-}
-
-model Movie {
-  id          String   @id @default(uuid())
-  title       String
-  overview    String?
-  releaseYear Int
-  genres      String[] @default([])
-  runtime     Int?
-  posterUrl   String?
-  createdBy   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  //relationships
-  creator        User            @relation("MovieCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  watchlistItems WatchlistItem[]
-}
-
-model WatchlistItem {
-  id        String          @id @default(uuid())
-  userId    String
-  movieId   String
-  status    watchlistStatus @default(PLANNED)
-  rating    Int?
-  notes     String?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-
-  //relationships
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  movie Movie @relation(fields: [movieId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, movieId])
-}
-
-// 
+// To store details of order for airline ticket booking and refund handling.
 model FLYGATEDetails {
   auto            BigInt   @id @default(autoincrement())
   orderId         String   @db.VarChar(20)
@@ -73,24 +27,8 @@ model FLYGATEDetails {
   entryDate       DateTime @default(now()) @db.Timestamp
 }
 
-model PendingOrder {
-  orderId      String   @id
-  amount       Float
-  customerName String?
-  createdAt    DateTime @default(now())
 
-  @@map("pending_orders")
-}
-
-model GlConfiguration {
-  code           String @id @map("CODE") @db.VarChar(10)
-  receivableGlAc String @map("RECEIVABLEGLAC") @db.VarChar(30)
-  suspenseGlAc   String @map("SUSPENSEGLAC") @db.VarChar(30)
-  payableGlAcNo  String @map("PAYABLEGLACNO") @db.VarChar(30)
-  status         Int?   @map("Status") // The '?' makes it nullable as per your [NULL] requirement
-}
-
-model TransactionLedger {
+model FlygateTransactions {
   code       Int       @id @default(autoincrement()) @map("CODE")
   userId     String?   @map("UserID") @db.VarChar(50)
   trnDate    DateTime? @map("TrnDate") @db.Timestamp
@@ -105,18 +43,13 @@ model TransactionLedger {
   lastName     String? @map("LASTNAME") @db.VarChar(200)
   gender       Int?    @map("GENDER") @db.SmallInt
   mobileNo     String? @map("MOBILENO") @db.VarChar(50)
-  emailId      String? @map("EMAILID") @db.VarChar(500)
-  resAddress   String? @map("RESADDRESS") @db.Text // nvarchar 4000
   customerName String? @map("CUSTOMERNAME") @db.VarChar(500)
-  custName     String? @map("CustName") @db.VarChar(500)
-  citizenId    String? @map("CitizenId") @db.VarChar(50)
 
   // Flight & Payment Info
   pnr             String?   @map("PNR") @db.VarChar(25)
   amount          Decimal?  @map("Amount") @db.Money
   currency        String?   @map("Currency") @db.VarChar(5)
   remarks         String?   @map("Remarks") @db.VarChar(500)
-  dueAmount       Decimal?  @map("DueAmount") @db.Money
   invRefNo        Int?      @map("InvRefNo")
   status          Decimal?  @map("STATUS") @db.Decimal
   expDate         String?   @map("ExpDate") @db.VarChar(100)
@@ -153,7 +86,7 @@ model TransactionLedger {
   orgBankRefNo        String? @map("OrgBankRefNo") @db.VarChar(500)
 }
 
-model RefundLedger {
+model RefundDetails {
   auto        Int       @id @default(autoincrement()) @map("Auto")
   receiveDate DateTime? @map("ReceiveDate") @db.Timestamp
   shortCode   String?   @map("ShortCode") @db.VarChar(10)
@@ -223,12 +156,6 @@ model Transactions {
   thirdPartyName  String?   @map("ThirdPartyName") @db.Text // nvarchar 1000
   disasterRiskAmt Decimal?  @map("DisasterRiskAmt") @db.Money
 }
-enum watchlistStatus {
-  PLANNED
-  WATCHING
-  COMPLETED
-  DROPPED
-}
 
 enum trnStatus {
   Success
@@ -236,5 +163,3 @@ enum trnStatus {
   Pending
   Reversed
 }
-
-//USER => MOVIE => Watchlist

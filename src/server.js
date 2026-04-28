@@ -19,7 +19,12 @@ app.use(cors({
       typeof origin === "string" &&
       /^http:\/\/localhost:\d+$/.test(origin);
 
-    if (!origin || allowedOrigins.includes(origin) || isLocalhostDev) {
+    // Allow any origin from 10.1.12.* subnet
+    const is10_1_12_Subnet =
+      typeof origin === "string" &&
+      /^http:\/\/10\.254\.100\.\d+:\d+$/.test(origin);
+
+    if (!origin || allowedOrigins.includes(origin) || isLocalhostDev || is10_1_12_Subnet) {
       return callback(null, true);
     }
     return callback(new Error(`CORS blocked for origin: ${origin}`));
