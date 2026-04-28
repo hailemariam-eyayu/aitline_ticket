@@ -13,14 +13,10 @@ const RIDE_PASSWORD   = process.env.RIDE_PASSWORD    || "enat@mpstaging!";
 const CBS_RT_URL      = process.env.cbs_endpoint     || process.env.cbs_url || "http://10.1.22.100:7003/FCUBSRTService/FCUBSRTService";
 const CBS_CR_ACCOUNT  = process.env.ride_cr_account  || process.env.cbs_offset_account || "0461112216017001";
 
-// Build Basic Auth header from credentials
-const rideHeaders = () => {
-    const token = Buffer.from(`${RIDE_USERNAME}:${RIDE_PASSWORD}`).toString("base64");
-    return {
-        "Content-Type":  "application/json",
-        "Authorization": `Basic ${token}`
-    };
-};
+// Ride auth — passed as axios `auth` option (same pattern as FlyGate)
+const rideAuth = { username: RIDE_USERNAME, password: RIDE_PASSWORD };
+
+const rideHeaders = () => ({ "Content-Type": "application/json" });
 
 const logJson = (label, data) =>
     console.log(`\n===== ${label} =====\n${JSON.stringify(data, null, 2)}\n===== END ${label} =====\n`);
@@ -53,7 +49,7 @@ const queryRideAccount = async (req, res) => {
         const rideRes = await axios.post(
             `${RIDE_BASE_URL}/api/v1/bank/enat/bill/query`,
             payload,
-            { headers: rideHeaders(), httpsAgent, validateStatus: (s) => s >= 200 && s < 600 }
+            { headers: rideHeaders(), auth: rideAuth, httpsAgent, validateStatus: (s) => s >= 200 && s < 600 }
         );
 
         logJson("RIDE QUERY RESPONSE", rideRes.data);
@@ -180,7 +176,7 @@ const payRide = async (req, res) => {
         const queryRes = await axios.post(
             `${RIDE_BASE_URL}/api/v1/bank/enat/bill/query`,
             queryPayload,
-            { headers: rideHeaders(), httpsAgent, validateStatus: (s) => s >= 200 && s < 600 }
+            { headers: rideHeaders(), auth: rideAuth, httpsAgent, validateStatus: (s) => s >= 200 && s < 600 }
         );
 
         logJson("RIDE QUERY RESPONSE", queryRes.data);
@@ -267,7 +263,7 @@ const payRide = async (req, res) => {
         const confirmRes = await axios.post(
             `${RIDE_BASE_URL}/api/v1/bank/enat/bill/confirm`,
             confirmPayload,
-            { headers: rideHeaders(), httpsAgent, validateStatus: (s) => s >= 200 && s < 600 }
+            { headers: rideHeaders(), auth: rideAuth, httpsAgent, validateStatus: (s) => s >= 200 && s < 600 }
         );
 
         logJson("RIDE CONFIRM RESPONSE", confirmRes.data);
