@@ -9,31 +9,8 @@ config();
 connectToDatabase();
 const app = express();
 
-const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:3000,http://localhost:3001")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow server-to-server tools (Postman/curl), configured origins, and localhost dev ports.
-    const isLocalhostDev =
-      typeof origin === "string" &&
-      /^http:\/\/localhost:\d+$/.test(origin);
-
-    // Allow any origin from 10.1.12.* subnet
-    const is10_1_12_Subnet =
-      typeof origin === "string" &&
-      /^http:\/\/10\.254\.100\.\d+:\d+$/.test(origin);
-
-    if (!origin || allowedOrigins.includes(origin) || isLocalhostDev || is10_1_12_Subnet) {
-      return callback(null, true);
-    }
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
-  },
-  credentials: true
-}));
-app.options(/.*/, cors());
+app.use(cors({ origin: true, credentials: true }));
+app.options(/.*/, cors({ origin: true, credentials: true }));
 
 // Body parsing middlewares
 app.use(express.json());
