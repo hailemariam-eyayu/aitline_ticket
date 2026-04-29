@@ -136,10 +136,47 @@ const buildReversalXml = (referenceNumber) => `<soapenv:Envelope xmlns:soapenv="
    </soapenv:Body>
 </soapenv:Envelope>`;
 
+/**
+ * Build CBS QueryTransaction SOAP envelope.
+ * Looks up a transaction by account number and date range to retrieve FCCREF.
+ *
+ * @param {object} p
+ * @param {string} p.acNo        - Account number to query
+ * @param {string} p.fromDate    - Start date YYYY-MM-DD
+ * @param {string} p.toDate      - End date YYYY-MM-DD (defaults to fromDate)
+ * @param {string} [p.fccRef]    - Optional: query by specific FCCREF directly
+ */
+const buildQueryTransactionXml = ({ acNo, fromDate, toDate, fccRef }) => {
+    const dateTo = toDate || fromDate;
+    return `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.com/service/FCUBSRTService">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <fcub:QUERYTRANSACTION_IOFS_REQ>
+         <fcub:FCUBS_HEADER>
+            <fcub:SOURCE>${CBS_SOURCE}</fcub:SOURCE>
+            <fcub:UBSCOMP>FCUBS</fcub:UBSCOMP>
+            <fcub:USERID>${CBS_USER}</fcub:USERID>
+            <fcub:BRANCH>${CBS_BRANCH}</fcub:BRANCH>
+            <fcub:SERVICE>FCUBSRTService</fcub:SERVICE>
+            <fcub:OPERATION>QueryTransaction</fcub:OPERATION>
+         </fcub:FCUBS_HEADER>
+         <fcub:FCUBS_BODY>
+            <fcub:Transaction-Details-IO>
+               ${fccRef ? `<fcub:FCCREF>${fccRef}</fcub:FCCREF>` : ""}
+               ${acNo    ? `<fcub:TXNACC>${acNo}</fcub:TXNACC>` : ""}
+               ${fromDate ? `<fcub:TXNDATE>${fromDate}</fcub:TXNDATE>` : ""}
+            </fcub:Transaction-Details-IO>
+         </fcub:FCUBS_BODY>
+      </fcub:QUERYTRANSACTION_IOFS_REQ>
+   </soapenv:Body>
+</soapenv:Envelope>`;
+};
+
 export {
     CBS_OFFSET_ACCOUNT,
     buildCreateTransactionXml,
     buildGenericTransactionXml,
+    buildQueryTransactionXml,
     buildReversalXml,
     extractXmlTag
 };
