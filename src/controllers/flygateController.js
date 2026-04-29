@@ -310,8 +310,6 @@ const confirmOrder = async (req, res) => {
         const customerName = bodyCustomerName || pending?.customerName || pendingData?.customerName || "Flygate Customer";
         const orderPnr     = pnr || pending?.pnr || "";
         const currency     = bodyCurrency || pending?.currency || "ETB";
-        // Branch = first 3 chars of account number if not provided
-        const resolvedBranch = branchCode || String(beneficiaryAcno).slice(0, 3);
 
         if (!amount || amount <= 0) {
             return res.status(400).json({ status: "Error", message: "Valid amount is required" });
@@ -321,11 +319,11 @@ const confirmOrder = async (req, res) => {
 
         // ── 1. Build & log CBS request ──────────────────────────────────────
         const soapRequestXml = cbsCreateTransaction({
+            channel:   "AIRLINE",
             prd:       CBS_PRD.AIRLINE,
             drAcNo:    String(beneficiaryAcno),
             crAcNo:    getOffsetAccount("AIRLINE"),
             amount,
-            drBranch:  resolvedBranch,
             narrative: `Airline ticket payment - ${orderid}`
         });
 
@@ -460,18 +458,18 @@ const confirmOrder = async (req, res) => {
         const flyGateTraceNumber = flyGateResponse.data?.traceNumber || flyGateResponse.data?.TraceNumber || finalTraceNumber;
         await insertTransactionJournal({
             prisma,
-            channel:        "AIRLINE",
-            drAcNo:         String(beneficiaryAcno),
-            crAcNo:         getOffsetAccount("AIRLINE"),
-            amount:         Number(amount),
-            cbsRefNo:       finalReferenceNumber,
-            trnDate:        cbsTrnDate,
-            utility:        orderPnr || orderid,          // PNR or orderId
-            utilRefNo:      flyGateTraceNumber,           // FlyGate traceNumber
-            particulars:    `Airline ticket - ${orderid}`,
-            branchCode:     resolvedBranch,
-            currency:       currency,
-            comAmount:      Number(extractXmlTag(cbsResponseXml, "CHGAMT") || 0),
+            cbsChannel:      "AIRLINE",
+            frontendChannel: "API",
+            drAcNo:          String(beneficiaryAcno),
+            crAcNo:          getOffsetAccount("AIRLINE"),
+            amount:          Number(amount),
+            cbsRefNo:        finalReferenceNumber,
+            trnDate:         cbsTrnDate,
+            utility:         orderPnr || orderid,
+            utilRefNo:       flyGateTraceNumber,
+            particulars:     `Airline ticket - ${orderid}`,
+            currency,
+            comAmount:       Number(extractXmlTag(cbsResponseXml, "CHGAMT") || 0),
             disasterRiskAmt: Number(extractXmlTag(cbsResponseXml, "LCYCHG") || 0)
         });
 

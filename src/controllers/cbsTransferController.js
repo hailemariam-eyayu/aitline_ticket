@@ -30,7 +30,7 @@ const logXml = (label, xml) =>
  * }
  */
 const cbsTransfer = async (req, res) => {
-    const { channel, prd, drAcNo, crAcNo, amount, drBranch, crBranch, currency = "ETB", narrative, referenceId } = req.body;
+    const { channel, prd, drAcNo, crAcNo, amount, currency = "ETB", narrative, referenceId } = req.body;
 
     // ── Validation ────────────────────────────────────────────────────────────
     const missing = [];
@@ -53,12 +53,11 @@ const cbsTransfer = async (req, res) => {
 
     // ── Build SOAP XML ────────────────────────────────────────────────────────
     const requestXml = cbsCreateTransaction({
+        channel:   String(channel).toUpperCase(),
         prd:       String(prd).toUpperCase(),
         drAcNo:    String(drAcNo),
         crAcNo:    creditAccount,
         amount:    txnAmount,
-        drBranch:  drBranch ? String(drBranch) : undefined,
-        crBranch:  crBranch ? String(crBranch) : undefined,
         currency:  String(currency).toUpperCase(),
         narrative: txnNarrative
     });

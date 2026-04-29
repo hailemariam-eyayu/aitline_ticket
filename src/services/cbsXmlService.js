@@ -1,12 +1,35 @@
 // ─── CBS config from env ──────────────────────────────────────────────────────
 const CBS_USER          = (process.env.cbs_user          || "ADCUSER").trim();
 const CBS_SOURCE        = (process.env.cbs_source        || "ADC").trim();
+
+// Fixed branches — only used for channels that don't have a real account to derive from
 const CBS_BRANCH        = (process.env.cbs_branch        || "001").trim();
 const CBS_OFFSET_BRANCH = (process.env.cbs_offset_branch || "046").trim();
 
 // Reversal uses a different source/user in CBS (PTP source for reversals)
 const CBS_REV_SOURCE = (process.env.cbs_rev_source || process.env.cbs_source || "ADC").trim();
 const CBS_REV_USER   = (process.env.cbs_rev_user   || process.env.cbs_user   || "ADCUSER").trim();
+
+// ─── Channels that use fixed env branches (not derived from account number) ──
+// For Telebirr, MPESA, IPS the account numbers are system GLs, not customer accounts,
+// so branch must be configured explicitly.
+const FIXED_BRANCH_CHANNELS = new Set(["TELEBIRR", "MPESA", "IPS"]);
+
+/**
+ * Derive the CBS branch code for a given channel + account number.
+ * - For TELEBIRR / MPESA / IPS: use the fixed env branch
+ * - For all others (AIRLINE, RIDE, BILL, etc.): first 3 chars of the account number
+ *
+ * @param {string} channel  - e.g. "AIRLINE", "RIDE", "TELEBIRR"
+ * @param {string} acNo     - account number
+ * @param {string} fallback - "DR" uses CBS_BRANCH, "CR" uses CBS_OFFSET_BRANCH
+ */
+const getBranch = (channel, acNo, fallback = "DR") => {
+    if (FIXED_BRANCH_CHANNELS.has(String(channel).toUpperCase())) {
+        return fallback === "CR" ? CBS_OFFSET_BRANCH : CBS_BRANCH;
+    }
+    return String(acNo || "").slice(0, 3) || (fallback === "CR" ? CBS_OFFSET_BRANCH : CBS_BRANCH);
+};
 
 // ─── Per-channel settlement (credit) accounts ─────────────────────────────────
 const CBS_OFFSET_ACCOUNTS = {
@@ -61,19 +84,18 @@ const extractXmlTag = (xml, tag) => {
  * Build a CBS CREATETRANSACTION_FSFS_REQ SOAP envelope.
  *
  * @param {object}        p
+ * @param {string}        p.channel    - Channel name (AIRLINE, RIDE, TELEBIRR, etc.) — for branch derivation
  * @param {string}        p.prd        - CBS product code (use CBS_PRD constants)
  * @param {string}        p.drAcNo     - Debit account number
  * @param {string}        p.crAcNo     - Credit account number
  * @param {number|string} p.amount     - Transaction amount
- * @param {string}        [p.drBranch] - Debit branch (defaults to CBS_BRANCH)
- * @param {string}        [p.crBranch] - Credit branch (defaults to CBS_OFFSET_BRANCH)
  * @param {string}        [p.currency] - Currency code (default ETB)
  * @param {string}        [p.narrative]- Narrative shown in CBS
  */
-const cbsCreateTransaction = ({ prd, drAcNo, crAcNo, amount, drBranch, crBranch, currency = "ETB", narrative = "" }) => {
+const cbsCreateTransaction = ({ channel, prd, drAcNo, crAcNo, amount, currency = "ETB", narrative = "" }) => {
     const txnAmount    = normalizeAmount(amount);
-    const txnBranch    = (drBranch || CBS_BRANCH).trim();
-    const offsetBranch = (crBranch || CBS_OFFSET_BRANCH).trim();
+    const txnBranch    = getBranch(channel, drAcNo, "DR");
+    const offsetBranch = getBranch(channel, crAcNo, "CR");
 
     return `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.com/service/FCUBSRTService">
    <soapenv:Header/>
@@ -172,50 +194,51 @@ const attemptAutoReversal = async (fccRef, cbsRtUrl, httpsAgent, axiosPost) => {
 // ─── Transactions journal helper ──────────────────────────────────────────────
 /**
  * Insert DR + CR rows into the Transactions table for a completed CBS transaction.
- * Matches the existing Transactions table structure (two rows per transaction).
  *
  * @param {object} p
- * @param {object} p.prisma        - Prisma client
- * @param {string} p.channel       - "AIRLINE" | "RIDE" | "TELEBIRR" etc.
- * @param {string} p.drAcNo        - Debit account number
- * @param {string} p.crAcNo        - Credit account number
- * @param {number} p.amount        - Transaction amount
- * @param {string} p.cbsRefNo      - CBS FCCREF (used as BatchId + CustIden)
- * @param {Date}   p.trnDate       - Transaction date from CBS BOOKDATE
- * @param {string} p.utility       - PNR (airline) or phone (ride) — the "what for"
- * @param {string} p.utilRefNo     - FlyGate traceNumber or Ride billRefNo
- * @param {string} p.particulars   - Free text description
- * @param {string} [p.branchCode]  - Branch code (first 3 chars of drAcNo)
- * @param {string} [p.currency]    - Currency code (default ETB)
- * @param {number} [p.comAmount]   - Charge amount from CBS
- * @param {number} [p.disasterRiskAmt] - Disaster risk charge from CBS
+ * @param {object} p.prisma           - Prisma client
+ * @param {string} p.cbsChannel       - CBS channel name for branch derivation (AIRLINE, RIDE, TELEBIRR…)
+ * @param {string} p.frontendChannel  - Frontend channel stored in DB only (MB, USSD, API, WEB…)
+ * @param {string} p.drAcNo           - Debit account number
+ * @param {string} p.crAcNo           - Credit account number
+ * @param {number} p.amount           - Transaction amount
+ * @param {string} p.cbsRefNo         - CBS FCCREF (BatchId + CustIden)
+ * @param {Date}   p.trnDate          - Transaction date from CBS BOOKDATE
+ * @param {string} p.utility          - PNR (airline) or phone (ride)
+ * @param {string} p.utilRefNo        - FlyGate traceNumber or Ride billRefNo
+ * @param {string} p.particulars      - Free text description
+ * @param {string} [p.currency]       - Currency code (default ETB)
+ * @param {number} [p.comAmount]      - Charge amount from CBS CHGAMT
+ * @param {number} [p.disasterRiskAmt]- Disaster risk from CBS LCYCHG
  */
 const insertTransactionJournal = async ({
-    prisma, channel, drAcNo, crAcNo, amount, cbsRefNo,
+    prisma, cbsChannel, frontendChannel,
+    drAcNo, crAcNo, amount, cbsRefNo,
     trnDate, utility, utilRefNo, particulars,
-    branchCode, currency = "ETB", comAmount = 0, disasterRiskAmt = 0
+    currency = "ETB", comAmount = 0, disasterRiskAmt = 0
 }) => {
-    const moduleType  = CBS_MODULE_TYPE[String(channel).toUpperCase()] ?? 153;
-    const uniqueId    = String(Date.now());          // shared by DR + CR rows
-    const batchId     = cbsRefNo || "";              // CBS FCCREF = BatchId
-    const iRefNo      = utilRefNo || cbsRefNo || ""; // our ref = IRefNo
-    const brn         = branchCode || String(drAcNo).slice(0, 3);
+    const moduleType  = CBS_MODULE_TYPE[String(cbsChannel).toUpperCase()] ?? 153;
+    const uniqueId    = String(Date.now());
+    const batchId     = cbsRefNo || "";
+    const iRefNo      = utilRefNo || cbsRefNo || "";
+    // Branch derived per account (or fixed for Telebirr/MPESA/IPS)
+    const drBranch    = getBranch(cbsChannel, drAcNo, "DR");
     const now         = new Date();
 
     const base = {
         batchId:        batchId.slice(0, 50),
         iRefNo:         iRefNo.slice(0, 50),
         trnDate,
-        branchCode:     brn.slice(0, 10),
+        branchCode:     drBranch.slice(0, 10),
         amount,
         currencyCode:   currency.slice(0, 5),
         utilRefNo:      (utilRefNo || "").slice(0, 100),
         utility:        (utility   || "").slice(0, 100),
-        custIden:       batchId.slice(0, 50),        // CBS ref = CustIden
+        custIden:       batchId.slice(0, 50),
         particulars:    (particulars || "").slice(0, 500),
         status:         1,
-        channel:        channel.slice(0, 10),
-        subChannel:     channel.slice(0, 10),
+        channel:        (frontendChannel || cbsChannel).slice(0, 10),  // stored in DB only
+        subChannel:     (frontendChannel || cbsChannel).slice(0, 10),
         uniqueId,
         processedTime:  trnDate,
         entryTime:      now,
@@ -228,9 +251,16 @@ const insertTransactionJournal = async ({
         data: { ...base, acNo: drAcNo.slice(0, 20), crDr: "DR", uniqueId: `${uniqueId}D` }
     }).catch(e => console.error("Transactions DR write failed:", e.message));
 
-    // CR row — credit the settlement account
+    // CR row — credit the settlement account (no charges on CR side)
     await prisma.transactions.create({
-        data: { ...base, acNo: crAcNo.slice(0, 20), crDr: "CR", uniqueId: `${uniqueId}C`, comAmount: null, disasterRiskAmt: null }
+        data: {
+            ...base,
+            acNo:           crAcNo.slice(0, 20),
+            crDr:           "CR",
+            uniqueId:       `${uniqueId}C`,
+            comAmount:      null,
+            disasterRiskAmt: null
+        }
     }).catch(e => console.error("Transactions CR write failed:", e.message));
 };
 
@@ -239,6 +269,7 @@ export {
     CBS_MODULE_TYPE,
     CBS_OFFSET_ACCOUNTS,
     getOffsetAccount,
+    getBranch,
     CBS_BRANCH,
     CBS_OFFSET_BRANCH,
     cbsCreateTransaction,

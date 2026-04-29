@@ -131,7 +131,6 @@ const payRide = async (req, res) => {
     const transTime      = new Date().toISOString().replace(/[-T:.Z]/g, "").slice(0, 14);
     const billRefNo      = bodyBillRef || `BR${Date.now()}`;
     const txnRemark      = remark || `Ride payment - ${phone}`;
-    const resolvedBranch = String(drAcNo).slice(0, 3); // branch = first 3 chars of account
 
     // ── Resolve the audit row ─────────────────────────────────────────────────
     // Priority: auditId from request → latest active+unpaid row for this phone
@@ -170,11 +169,11 @@ const payRide = async (req, res) => {
     try {
         // ── CBS CreateTransaction ─────────────────────────────────────────────
         const requestXml = cbsCreateTransaction({
+            channel:   "RIDE",
             prd:       CBS_PRD.RIDE,
             drAcNo:    String(drAcNo),
             crAcNo:    CBS_CR_ACCOUNT,
             amount:    txnAmount,
-            drBranch:  resolvedBranch,
             currency:  "ETB",
             narrative: `Ride payment ${phone} - ${billRefNo}`
         });
@@ -280,18 +279,18 @@ const payRide = async (req, res) => {
         // ── INSERT Transactions journal (DR + CR rows, only on full success) ─
         await insertTransactionJournal({
             prisma,
-            channel:        "RIDE",
-            drAcNo:         String(drAcNo),
-            crAcNo:         CBS_CR_ACCOUNT,
-            amount:         txnAmount,
-            cbsRefNo:       cbsRefNo,
-            trnDate:        cbsTrnDate,
-            utility:        String(phone),              // phone = "what for"
-            utilRefNo:      billRefNo,                  // our bill reference
-            particulars:    `Ride payment ${phone}`,
-            branchCode:     resolvedBranch,
-            currency:       "ETB",
-            comAmount:      Number(extractXmlTag(cbsXml, "CHGAMT") || 0),
+            cbsChannel:      "RIDE",
+            frontendChannel: "API",
+            drAcNo:          String(drAcNo),
+            crAcNo:          CBS_CR_ACCOUNT,
+            amount:          txnAmount,
+            cbsRefNo:        cbsRefNo,
+            trnDate:         cbsTrnDate,
+            utility:         String(phone),
+            utilRefNo:       billRefNo,
+            particulars:     `Ride payment ${phone}`,
+            currency:        "ETB",
+            comAmount:       Number(extractXmlTag(cbsXml, "CHGAMT") || 0),
             disasterRiskAmt: Number(extractXmlTag(cbsXml, "LCYCHG") || 0)
         });
 
