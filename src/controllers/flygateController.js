@@ -309,6 +309,8 @@ const confirmOrder = async (req, res) => {
         const customerName = bodyCustomerName || pending?.customerName || pendingData?.customerName || "Flygate Customer";
         const orderPnr     = pnr || pending?.pnr || "";
         const currency     = bodyCurrency || pending?.currency || "ETB";
+        // Branch = first 3 chars of account number if not provided
+        const resolvedBranch = branchCode || String(beneficiaryAcno).slice(0, 3);
 
         if (!amount || amount <= 0) {
             return res.status(400).json({ status: "Error", message: "Valid amount is required" });
@@ -322,7 +324,7 @@ const confirmOrder = async (req, res) => {
             drAcNo:    String(beneficiaryAcno),
             crAcNo:    getOffsetAccount("AIRLINE"),
             amount,
-            drBranch:  branchCode,
+            drBranch:  resolvedBranch,
             narrative: `Airline ticket payment - ${orderid}`
         });
 
@@ -463,7 +465,7 @@ const confirmOrder = async (req, res) => {
                 processedTime: new Date(),
                 drAcNo:       String(beneficiaryAcno).slice(0, 50),
                 crAcNo:       getOffsetAccount("AIRLINE").slice(0, 50),
-                branchCode:   branchCode ? String(branchCode).slice(0, 10) : null,
+                branchCode:   resolvedBranch ? String(resolvedBranch).slice(0, 10) : null,
                 amount:       Number(amount),
                 currencyCode: String(currency).slice(0, 5),
                 customerName: String(customerName).slice(0, 500),

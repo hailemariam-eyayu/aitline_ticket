@@ -137,6 +137,8 @@ const payRide = async (req, res) => {
     const transTime  = new Date().toISOString().replace(/[-T:.Z]/g, "").slice(0, 14); // YYYYMMDDHHmmss
     const billRefNo  = bodyBillRef || `BR${Date.now()}`;
     const txnRemark  = remark || `Ride payment - ${phone}`;
+    // Branch = first 3 chars of account number (e.g. "0011230708313001" → "001")
+    const resolvedBranch = drBranch || String(drAcNo).slice(0, 3);
 
     // Resolve audit row: use auditId from query step if provided,
     // otherwise find the latest pending query row for this phone
@@ -173,7 +175,7 @@ const payRide = async (req, res) => {
             drAcNo:    String(drAcNo),
             crAcNo:    CBS_CR_ACCOUNT,
             amount:    txnAmount,
-            drBranch:  drBranch ? String(drBranch) : undefined,
+            drBranch:  resolvedBranch,
             currency:  "ETB",
             narrative: `Ride payment ${phone} - ${billRefNo}`
         });
