@@ -2,7 +2,7 @@ import axios from "axios";
 import https from "https";
 import { config } from "dotenv";
 import { prisma } from "../config/db.js";
-import { buildGenericTransactionXml, extractXmlTag } from "../services/cbsXmlService.js";
+import { cbsCreateTransaction, cbsReverseTransaction, CBS_PRD, extractXmlTag } from "../services/cbsXmlService.js";
 config();
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
@@ -221,8 +221,8 @@ const payRide = async (req, res) => {
         }
 
         // ── Step 2: CBS CreateTransaction ─────────────────────────────────────
-        const requestXml = buildGenericTransactionXml({
-            prd:       "RIDE",
+        const requestXml = cbsCreateTransaction({
+            prd:       CBS_PRD.RIDE,
             drAcNo:    String(drAcNo),
             crAcNo:    CBS_CR_ACCOUNT,
             amount:    txnAmount,

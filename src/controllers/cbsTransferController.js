@@ -2,7 +2,7 @@ import axios from "axios";
 import https from "https";
 import { config } from "dotenv";
 import { prisma } from "../config/db.js";
-import { buildGenericTransactionXml, buildReversalXml, buildQueryTransactionXml, extractXmlTag } from "../services/cbsXmlService.js";
+import { cbsCreateTransaction, cbsReverseTransaction, CBS_PRD, extractXmlTag } from "../services/cbsXmlService.js";
 config();
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
@@ -52,7 +52,7 @@ const cbsTransfer = async (req, res) => {
     const txnNarrative = narrative || `${channel} payment${referenceId ? " - " + referenceId : ""}`;
 
     // ── Build SOAP XML ────────────────────────────────────────────────────────
-    const requestXml = buildGenericTransactionXml({
+    const requestXml = cbsCreateTransaction({
         prd:       String(prd).toUpperCase(),
         drAcNo:    String(drAcNo),
         crAcNo:    String(crAcNo),
@@ -163,7 +163,7 @@ const cbsReverse = async (req, res) => {
         return res.status(400).json({ status: "Error", message: "cbsRefNo is required" });
     }
 
-    const requestXml = buildReversalXml(String(cbsRefNo));
+    const requestXml = cbsReverseTransaction(String(cbsRefNo));
     logXml("CBS REVERSE REQUEST", requestXml);
 
     try {
@@ -250,98 +250,4 @@ const getTransfers = async (req, res) => {
     });
 };
 
-// ─── POST /cbs/query ─────────────────────────────────────────────────────────
-/**
- * Query CBS for a transaction by account number + date, or directly by FCCREF.
- * Returns the CBS reference (FCCREF/XREF), amount, date, and status.
- *
- * Body:
- * {
- *   acNo:      "0011230708313001"   — account number to query  (required if no fccRef)
- *   date:      "2026-04-28"         — transaction date YYYY-MM-DD (required if no fccRef)
- *   toDate:    "2026-04-28"         — end date for range (optional, defaults to date)
- *   fccRef:    "001ATAD22346A03I"   — query directly by CBS ref (optional, skips acNo/date)
- * }
- */
-const cbsQueryTransaction = async (req, res) => {
-    const { acNo, date, toDate, fccRef } = req.body;
-
-    if (!fccRef && (!acNo || !date)) {
-        return res.status(400).json({
-            status:  "Error",
-            message: "Provide either fccRef, or both acNo and date"
-        });
-    }
-
-    const requestXml = buildQueryTransactionXml({
-        acNo:     acNo     ? String(acNo).trim()   : undefined,
-        fromDate: date     ? String(date).trim()   : undefined,
-        toDate:   toDate   ? String(toDate).trim() : undefined,
-        fccRef:   fccRef   ? String(fccRef).trim() : undefined
-    });
-
-    logXml("CBS QUERY REQUEST", requestXml);
-
-    try {
-        const cbsResponse = await axios.post(CBS_RT_URL, requestXml, {
-            headers: {
-                "Content-Type": "text/xml;charset=utf-8",
-                SOAPAction: "QUERYTRANSACTION_IOFS_REQ"
-            },
-            httpsAgent,
-            validateStatus: (s) => s >= 200 && s < 600
-        });
-
-        const responseXml = cbsResponse.data || "";
-        logXml("CBS QUERY RESPONSE", responseXml);
-
-        const faultString = extractXmlTag(responseXml, "faultstring");
-        if (faultString) {
-            return res.status(400).json({ status: "Error", message: `CBS Fault: ${faultString}` });
-        }
-
-        const isSuccess = responseXml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
-        const errorCode = extractXmlTag(responseXml, "ECODE");
-        const errorDesc = extractXmlTag(responseXml, "EDESC");
-
-        if (!isSuccess) {
-            return res.status(400).json({
-                status:    "Error",
-                message:   errorDesc || "CBS query failed",
-                errorCode: errorCode || null
-            });
-        }
-
-        // Extract transaction fields from response
-        const result = {
-            fccRef:    extractXmlTag(responseXml, "FCCREF") || extractXmlTag(responseXml, "XREF"),
-            acNo:      extractXmlTag(responseXml, "TXNACC"),
-            amount:    extractXmlTag(responseXml, "TXNAMT"),
-            currency:  extractXmlTag(responseXml, "TXNCCY"),
-            txnDate:   extractXmlTag(responseXml, "TXNDATE"),
-            valDate:   extractXmlTag(responseXml, "VALDATE"),
-            narrative: extractXmlTag(responseXml, "NARRATIVE"),
-            drCr:      extractXmlTag(responseXml, "TXNDRCR"),
-            prd:       extractXmlTag(responseXml, "PRD"),
-            branch:    extractXmlTag(responseXml, "BRN"),
-            acTitle:   extractXmlTag(responseXml, "ACCTITLE1"),
-            authStat:  extractXmlTag(responseXml, "AUTHSTAT"),
-            maker:     extractXmlTag(responseXml, "MAKERID"),
-            makerStamp: extractXmlTag(responseXml, "MAKERSTAMP")
-        };
-
-        return res.status(200).json({
-            status:  "Success",
-            message: "Transaction found",
-            data:    result
-        });
-
-    } catch (error) {
-        return res.status(500).json({
-            status:  "Error",
-            message: error.message
-        });
-    }
-};
-
-export { cbsTransfer, cbsReverse, getTransfers, cbsQueryTransaction };
+export { cbsTransfer, cbsReverse, getTransfers };

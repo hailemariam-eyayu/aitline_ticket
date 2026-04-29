@@ -4,8 +4,9 @@ import { config } from 'dotenv';
 import { prisma } from "../config/db.js";
 import {
     CBS_OFFSET_ACCOUNT,
-    buildCreateTransactionXml,
-    buildReversalXml,
+    CBS_PRD,
+    cbsCreateTransaction,
+    cbsReverseTransaction,
     extractXmlTag
 } from "../services/cbsXmlService.js";
 config();
@@ -293,11 +294,13 @@ const confirmOrder = async (req, res) => {
         const finalTraceNumber = `TRC${Date.now()}`;
 
         // ── 1. Build & log CBS request ──────────────────────────────────────
-        const { xml: soapRequestXml } = buildCreateTransactionXml({
+        const soapRequestXml = cbsCreateTransaction({
+            prd:       CBS_PRD.AIRLINE,
+            drAcNo:    String(beneficiaryAcno),
+            crAcNo:    CBS_OFFSET_ACCOUNT,
             amount,
-            orderid,
-            beneficiaryAcno,   // debit account from frontend
-            branchCode         // branch from frontend
+            drBranch:  branchCode,
+            narrative: `Airline ticket payment - ${orderid}`
         });
 
         await logCbsReqRes(orderid, 1, soapRequestXml);
@@ -477,7 +480,7 @@ const refundRequest = async (req, res) => {
 
     try {
         // ── 1. Build & log CBS reversal request ─────────────────────────────
-        const soapRequestXml = buildReversalXml(ReferenceNumber);
+        const soapRequestXml = cbsReverseTransaction(ReferenceNumber);
         await logCbsReqRes(orderId, 1, soapRequestXml);
 
         // ── 2. Call CBS reversal ─────────────────────────────────────────────
