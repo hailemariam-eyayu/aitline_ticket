@@ -117,7 +117,7 @@ const validateAccounts = async (req, res) => {
  * Body: { drAcNo, crAcNo, amount, narrative, currency? }
  */
 const a2aTransfer = async (req, res) => {
-    const { drAcNo, crAcNo, amount, narrative, currency = "ETB" } = req.body;
+    const { drAcNo, crAcNo, amount, narrative, currency = "ETB", channel: frontendChannel } = req.body;
 
     const missing = [];
     if (!drAcNo)  missing.push("drAcNo");
@@ -239,7 +239,7 @@ const a2aTransfer = async (req, res) => {
         await insertTransactionJournal({
             prisma,
             cbsChannel:      "A2A",
-            frontendChannel: "API",
+            frontendChannel: frontendChannel || "IB",
             drAcNo:          String(drAcNo),
             crAcNo:          String(crAcNo),
             amount:          txnAmount,

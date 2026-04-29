@@ -224,7 +224,7 @@ const validatePNR = async (req, res) => {
 // ─── confirmOrder ─────────────────────────────────────────────────────────────
 
 const confirmOrder = async (req, res) => {
-    const { orderid, beneficiaryAcno, branchCode, remark, pnr, customerName: bodyCustomerName, currency: bodyCurrency } = req.body;
+    const { orderid, beneficiaryAcno, branchCode, remark, pnr, customerName: bodyCustomerName, currency: bodyCurrency, channel: frontendChannel } = req.body;
 
     if (!orderid || !beneficiaryAcno) {
         return res.status(400).json({ status: "Error", message: "orderid and beneficiaryAcno are required" });
@@ -448,7 +448,7 @@ const confirmOrder = async (req, res) => {
                 traceNumber:   String(finalTraceNumber).slice(0, 150),
                 bankRefNo:     String(finalReferenceNumber).slice(0, 500),
                 processedDate: new Date(),
-                channel:       "API",
+                channel:       frontendChannel || "IB",
                 isRefund:      0,
                 entryDate:     new Date()
             }
@@ -459,7 +459,7 @@ const confirmOrder = async (req, res) => {
         await insertTransactionJournal({
             prisma,
             cbsChannel:      "AIRLINE",
-            frontendChannel: "API",
+            frontendChannel: frontendChannel || "IB",
             drAcNo:          String(beneficiaryAcno),
             crAcNo:          getOffsetAccount("AIRLINE"),
             amount:          Number(amount),

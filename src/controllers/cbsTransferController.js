@@ -30,7 +30,7 @@ const logXml = (label, xml) =>
  * }
  */
 const cbsTransfer = async (req, res) => {
-    const { channel, prd, drAcNo, crAcNo, amount, currency = "ETB", narrative, referenceId } = req.body;
+    const { channel, prd, drAcNo, crAcNo, amount, currency = "ETB", narrative, referenceId, frontendChannel } = req.body;
 
     // ── Validation ────────────────────────────────────────────────────────────
     const missing = [];

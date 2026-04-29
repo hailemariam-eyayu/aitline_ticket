@@ -116,7 +116,7 @@ const queryRideAccount = async (req, res) => {
  * }
  */
 const payRide = async (req, res) => {
-    const { auditId: bodyAuditId, phone, amount, drAcNo, remark, billRefNo: bodyBillRef } = req.body;
+    const { auditId: bodyAuditId, phone, amount, drAcNo, remark, billRefNo: bodyBillRef, channel: frontendChannel } = req.body;
 
     // ── Validation ────────────────────────────────────────────────────────────
     const missing = [];
@@ -280,7 +280,7 @@ const payRide = async (req, res) => {
         await insertTransactionJournal({
             prisma,
             cbsChannel:      "RIDE",
-            frontendChannel: "API",
+            frontendChannel: frontendChannel || "IB",
             drAcNo:          String(drAcNo),
             crAcNo:          CBS_CR_ACCOUNT,
             amount:          txnAmount,
