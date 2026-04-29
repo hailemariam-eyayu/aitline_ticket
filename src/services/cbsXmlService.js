@@ -3,7 +3,23 @@ const CBS_USER          = (process.env.cbs_user          || "ADCUSER").trim();
 const CBS_SOURCE        = (process.env.cbs_source        || "ADC").trim();
 const CBS_BRANCH        = (process.env.cbs_branch        || "001").trim();
 const CBS_OFFSET_BRANCH = (process.env.cbs_offset_branch || "046").trim();
-const CBS_OFFSET_ACCOUNT = (process.env.cbs_offset_account || "0461112216017001").trim();
+
+// ─── Per-channel settlement (credit) accounts ─────────────────────────────────
+// Each channel debits the customer and credits its own settlement GL/account.
+// Set the correct account numbers in .env — these are just safe fallbacks.
+const CBS_OFFSET_ACCOUNTS = {
+    AIRLINE:  (process.env.cbs_offset_airline  || process.env.cbs_offset_account || "0461112216017001").trim(),
+    TELEBIRR: (process.env.cbs_offset_telebirr || process.env.cbs_offset_account || "0461112216017001").trim(),
+    RIDE:     (process.env.cbs_offset_ride     || process.env.cbs_offset_account || "0461112216017001").trim(),
+    BILL:     (process.env.cbs_offset_bill     || process.env.cbs_offset_account || "0461112216017001").trim(),
+    MPESA:    (process.env.cbs_offset_mpesa    || process.env.cbs_offset_account || "0461112216017001").trim(),
+    IPS:      (process.env.cbs_offset_ips      || process.env.cbs_offset_account || "0461112216017001").trim(),
+    OTHER:    (process.env.cbs_offset_account  || "0461112216017001").trim(),
+};
+
+// Convenience: get offset account for a channel (falls back to OTHER)
+const getOffsetAccount = (channel) =>
+    CBS_OFFSET_ACCOUNTS[String(channel).toUpperCase()] || CBS_OFFSET_ACCOUNTS.OTHER;
 
 // ─── PRD codes per channel ────────────────────────────────────────────────────
 // Add new channels here as needed
@@ -121,7 +137,8 @@ const cbsReverseTransaction = (fccRef) =>
 
 export {
     CBS_PRD,
-    CBS_OFFSET_ACCOUNT,
+    CBS_OFFSET_ACCOUNTS,
+    getOffsetAccount,
     CBS_BRANCH,
     CBS_OFFSET_BRANCH,
     cbsCreateTransaction,

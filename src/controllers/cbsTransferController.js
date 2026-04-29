@@ -2,7 +2,7 @@ import axios from "axios";
 import https from "https";
 import { config } from "dotenv";
 import { prisma } from "../config/db.js";
-import { cbsCreateTransaction, cbsReverseTransaction, CBS_PRD, extractXmlTag } from "../services/cbsXmlService.js";
+import { cbsCreateTransaction, cbsReverseTransaction, CBS_PRD, getOffsetAccount, extractXmlTag } from "../services/cbsXmlService.js";
 config();
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
@@ -37,7 +37,6 @@ const cbsTransfer = async (req, res) => {
     if (!channel)  missing.push("channel");
     if (!prd)      missing.push("prd");
     if (!drAcNo)   missing.push("drAcNo");
-    if (!crAcNo)   missing.push("crAcNo");
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) missing.push("amount (must be > 0)");
 
     if (missing.length) {
@@ -47,15 +46,16 @@ const cbsTransfer = async (req, res) => {
         });
     }
 
-    const traceNumber = `TRC${Date.now()}`;
-    const txnAmount   = Number(amount);
+    const txnAmount    = Number(amount);
     const txnNarrative = narrative || `${channel} payment${referenceId ? " - " + referenceId : ""}`;
+    // crAcNo defaults to the channel's configured settlement account if not provided
+    const creditAccount = crAcNo ? String(crAcNo) : getOffsetAccount(channel);
 
     // ── Build SOAP XML ────────────────────────────────────────────────────────
     const requestXml = cbsCreateTransaction({
         prd:       String(prd).toUpperCase(),
         drAcNo:    String(drAcNo),
-        crAcNo:    String(crAcNo),
+        crAcNo:    creditAccount,
         amount:    txnAmount,
         drBranch:  drBranch ? String(drBranch) : undefined,
         crBranch:  crBranch ? String(crBranch) : undefined,
@@ -111,7 +111,7 @@ const cbsTransfer = async (req, res) => {
                 channel:     String(channel).toUpperCase().slice(0, 30),
                 prd:         String(prd).toUpperCase().slice(0, 20),
                 drAcNo:      String(drAcNo).slice(0, 50),
-                crAcNo:      String(crAcNo).slice(0, 50),
+                crAcNo:      creditAccount.slice(0, 50),
                 drBranch:    drBranch  ? String(drBranch).slice(0, 10)  : null,
                 crBranch:    crBranch  ? String(crBranch).slice(0, 10)  : null,
                 amount:      txnAmount,

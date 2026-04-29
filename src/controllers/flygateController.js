@@ -3,7 +3,8 @@ import https from "https";
 import { config } from 'dotenv';
 import { prisma } from "../config/db.js";
 import {
-    CBS_OFFSET_ACCOUNT,
+    CBS_OFFSET_ACCOUNTS,
+    getOffsetAccount,
     CBS_PRD,
     cbsCreateTransaction,
     cbsReverseTransaction,
@@ -297,7 +298,7 @@ const confirmOrder = async (req, res) => {
         const soapRequestXml = cbsCreateTransaction({
             prd:       CBS_PRD.AIRLINE,
             drAcNo:    String(beneficiaryAcno),
-            crAcNo:    CBS_OFFSET_ACCOUNT,
+            crAcNo:    getOffsetAccount("AIRLINE"),
             amount,
             drBranch:  branchCode,
             narrative: `Airline ticket payment - ${orderid}`
@@ -398,7 +399,7 @@ const confirmOrder = async (req, res) => {
                 orderId: String(orderid).slice(0, 20),
                 trnDate: new Date(),
                 drAcNo: String(beneficiaryAcno).slice(0, 50),
-                crAcNo: String(CBS_OFFSET_ACCOUNT).slice(0, 50),
+                crAcNo: getOffsetAccount("AIRLINE").slice(0, 50),
                 customerName: String(customerName).slice(0, 500),
                 pnr: orderPnr ? String(orderPnr).slice(0, 25) : null,
                 amount: Number(amount),
@@ -422,7 +423,7 @@ const confirmOrder = async (req, res) => {
                 trnDate: new Date(),
                 processedTime: new Date(),
                 drAcNo: String(beneficiaryAcno).slice(0, 50),
-                crAcNo: String(CBS_OFFSET_ACCOUNT).slice(0, 50),
+                crAcNo: getOffsetAccount("AIRLINE").slice(0, 50),
                 branchCode: branchCode ? String(branchCode).slice(0, 10) : null,
                 amount: Number(amount),
                 currencyCode: String(currency).slice(0, 5),
@@ -539,7 +540,7 @@ const refundRequest = async (req, res) => {
             RefundReferenceCode: refundReferenceCode,
             bankRefundReference: ReferenceNumber,
             refundDate: new Date().toISOString().split('T')[0],
-            RefundAccountNumber: req.body.RefundAccountNumber || CBS_OFFSET_ACCOUNT,
+            RefundAccountNumber: req.body.RefundAccountNumber || getOffsetAccount("AIRLINE"),
             AccountHolderName: `${firstName || ""} ${lastName || ""}`.trim(),
             refundFOP,
             status: 1,

@@ -2,7 +2,7 @@ import axios from "axios";
 import https from "https";
 import { config } from "dotenv";
 import { prisma } from "../config/db.js";
-import { cbsCreateTransaction, cbsReverseTransaction, CBS_PRD, extractXmlTag } from "../services/cbsXmlService.js";
+import { cbsCreateTransaction, cbsReverseTransaction, CBS_PRD, getOffsetAccount, extractXmlTag } from "../services/cbsXmlService.js";
 config();
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
@@ -11,7 +11,7 @@ const RIDE_BASE_URL   = (process.env.RIDE_BASE_URL   || "https://stagingmp.ridep
 const RIDE_USERNAME   = (process.env.RIDE_USERNAME   || "enatstagingpassword").trim();
 const RIDE_PASSWORD   = (process.env.RIDE_PASSWORD   || "enat@mpstaging!").trim();
 const CBS_RT_URL      = process.env.cbs_endpoint     || process.env.cbs_url || "http://10.1.22.100:7003/FCUBSRTService/FCUBSRTService";
-const CBS_CR_ACCOUNT  = process.env.ride_cr_account  || process.env.cbs_offset_account || "0461112216017001";
+const CBS_CR_ACCOUNT  = process.env.ride_cr_account  || getOffsetAccount("RIDE");
 
 // Ride auth — passed as axios `auth` option (same pattern as FlyGate)
 const rideAuth = { username: RIDE_USERNAME, password: RIDE_PASSWORD };
