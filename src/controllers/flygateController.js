@@ -323,6 +323,9 @@ const confirmOrder = async (req, res) => {
         const cbsXref = extractXmlTag(cbsResponseXml, "XREF");
         const cbsErrorDesc = extractXmlTag(cbsResponseXml, "EDESC");
         const finalReferenceNumber = cbsFccRef || cbsXref;
+        // Use CBS book date as canonical transaction date (e.g. "2026-04-29")
+        const cbsBookDate = extractXmlTag(cbsResponseXml, "BOOKDATE");
+        const cbsTrnDate  = cbsBookDate ? new Date(cbsBookDate) : new Date();
 
         await writeFlygateAudit({
             orderId: orderid, reqType: 2,
@@ -396,47 +399,46 @@ const confirmOrder = async (req, res) => {
         // ── 5. Write FlygateTransactions (confirmed record) ─────────────────
         await prisma.flygateTransactions.create({
             data: {
-                orderId: String(orderid).slice(0, 20),
-                trnDate: new Date(),
-                drAcNo: String(beneficiaryAcno).slice(0, 50),
-                crAcNo: getOffsetAccount("AIRLINE").slice(0, 50),
-                customerName: String(customerName).slice(0, 500),
-                pnr: orderPnr ? String(orderPnr).slice(0, 25) : null,
-                amount: Number(amount),
-                currency: String(currency).slice(0, 5),
-                remarks: remark ? String(remark).slice(0, 500) : `Payment for order ${orderid}`,
-                status: 1,
-                traceNumber: String(finalTraceNumber).slice(0, 150),
-                bankRefNo: String(finalReferenceNumber).slice(0, 500),
+                orderId:       String(orderid).slice(0, 20),
+                trnDate:       cbsTrnDate,
+                drAcNo:        String(beneficiaryAcno).slice(0, 50),
+                crAcNo:        getOffsetAccount("AIRLINE").slice(0, 50),
+                customerName:  String(customerName).slice(0, 500),
+                pnr:           orderPnr ? String(orderPnr).slice(0, 25) : null,
+                amount:        Number(amount),
+                currency:      String(currency).slice(0, 5),
+                remarks:       remark ? String(remark).slice(0, 500) : `Payment for order ${orderid}`,
+                status:        1,
+                traceNumber:   String(finalTraceNumber).slice(0, 150),
+                bankRefNo:     String(finalReferenceNumber).slice(0, 500),
                 processedDate: new Date(),
-                channel: "API",
-                isRefund: 0,
-                entryDate: new Date()
+                channel:       "API",
+                isRefund:      0,
+                entryDate:     new Date()
             }
         }).catch(e => console.error("FlygateTransactions write failed:", e.message));
 
-        // ── 6. Write Transactions (CBS journal) ─────────────────────────────
+        // ── 6. Write Transactions (CBS journal — trnDate from CBS BOOKDATE) ──
         await prisma.transactions.create({
             data: {
-                orderId: String(orderid).slice(0, 20),
-                pnr: orderPnr ? String(orderPnr).slice(0, 25) : null,
-                trnDate: new Date(),
+                orderId:      String(orderid).slice(0, 20),
+                pnr:          orderPnr ? String(orderPnr).slice(0, 25) : null,
+                trnDate:      cbsTrnDate,
                 processedTime: new Date(),
-                drAcNo: String(beneficiaryAcno).slice(0, 50),
-                crAcNo: getOffsetAccount("AIRLINE").slice(0, 50),
-                branchCode: branchCode ? String(branchCode).slice(0, 10) : null,
-                amount: Number(amount),
+                drAcNo:       String(beneficiaryAcno).slice(0, 50),
+                crAcNo:       getOffsetAccount("AIRLINE").slice(0, 50),
+                branchCode:   branchCode ? String(branchCode).slice(0, 10) : null,
+                amount:       Number(amount),
                 currencyCode: String(currency).slice(0, 5),
                 customerName: String(customerName).slice(0, 500),
-                cbsRefNo: String(finalReferenceNumber).slice(0, 50),
-                traceNumber: String(finalTraceNumber).slice(0, 150),
-                uniqueId: `${orderid}-${finalTraceNumber}`.slice(0, 50),
-                crDr: "DEBIT",
-                remarks: remark ? String(remark).slice(0, 500) : `Airline payment ${orderid}`,
-                particulars: `FlyGate order ${orderid}`,
-                status: 1,
-                channel: "API",
-                entryTime: new Date()
+                cbsRefNo:     String(finalReferenceNumber).slice(0, 50),
+                uniqueId:     `${orderid}-${finalReferenceNumber}`.slice(0, 50),
+                crDr:         "DEBIT",
+                remarks:      remark ? String(remark).slice(0, 500) : `Airline payment ${orderid}`,
+                particulars:  `FlyGate order ${orderid}`,
+                status:       1,
+                channel:      "API",
+                entryTime:    new Date()
             }
         }).catch(e => console.error("Transactions write failed:", e.message));
 

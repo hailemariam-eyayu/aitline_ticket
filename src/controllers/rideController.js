@@ -2,37 +2,32 @@ import axios from "axios";
 import https from "https";
 import { config } from "dotenv";
 import { prisma } from "../config/db.js";
-import { cbsCreateTransaction, cbsReverseTransaction, CBS_PRD, getOffsetAccount, extractXmlTag } from "../services/cbsXmlService.js";
+import { cbsCreateTransaction, CBS_PRD, getOffsetAccount, extractXmlTag } from "../services/cbsXmlService.js";
 config();
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-const RIDE_BASE_URL   = (process.env.RIDE_BASE_URL   || "https://stagingmp.rideplus.co").trim().replace(/\/$/, "");
-const RIDE_USERNAME   = (process.env.RIDE_USERNAME   || "enatstagingpassword").trim();
-const RIDE_PASSWORD   = (process.env.RIDE_PASSWORD   || "enat@mpstaging!").trim();
-const CBS_RT_URL      = process.env.cbs_endpoint     || process.env.cbs_url || "http://10.1.22.100:7003/FCUBSRTService/FCUBSRTService";
-const CBS_CR_ACCOUNT  = process.env.ride_cr_account  || getOffsetAccount("RIDE");
+const RIDE_BASE_URL  = (process.env.RIDE_BASE_URL  || "https://stagingmp.rideplus.co").trim().replace(/\/$/, "");
+const RIDE_USERNAME  = (process.env.RIDE_USERNAME  || "enatstagingpassword").trim();
+const RIDE_PASSWORD  = (process.env.RIDE_PASSWORD  || "enat@mpstaging!").trim();
+const CBS_RT_URL     = (process.env.cbs_endpoint   || process.env.cbs_url || "http://10.1.22.100:7003/FCUBSRTService/FCUBSRTService").trim();
+const CBS_CR_ACCOUNT = (process.env.ride_cr_account || getOffsetAccount("RIDE")).trim();
 
-// Ride auth — passed as axios `auth` option (same pattern as FlyGate)
-const rideAuth = { username: RIDE_USERNAME, password: RIDE_PASSWORD };
-
+const rideAuth    = { username: RIDE_USERNAME, password: RIDE_PASSWORD };
 const rideHeaders = () => ({ "Content-Type": "application/json" });
 
 const logJson = (label, data) =>
     console.log(`\n===== ${label} =====\n${JSON.stringify(data, null, 2)}\n===== END ${label} =====\n`);
-
 const logXml = (label, xml) =>
     console.log(`\n===== ${label} =====\n${xml}\n===== END ${label} =====\n`);
 
 // ─── POST /ride/query ─────────────────────────────────────────────────────────
 /**
- * Check if a phone number is a valid active Ride account.
+ * Verify phone is an active Ride account.
+ * Creates the RideTransaction audit row and returns auditId.
+ * The frontend must pass auditId back to /ride/pay.
  *
  * Body: { phone: "251911259134" }
- *
- * Response:
- *   200 { status:"Success", data:{ full_name, phone, status } }
- *   404 { status:"Error", message:"Phone not found or inactive" }
  */
 const queryRideAccount = async (req, res) => {
     const { phone } = req.body;
@@ -54,23 +49,23 @@ const queryRideAccount = async (req, res) => {
 
         logJson("RIDE QUERY RESPONSE", rideRes.data);
 
-        // Ride returns 200 with { message: "Bad Authorization" } on auth failure
-        // or non-200 status — surface the real message in both cases
         const rideMessage = rideRes.data?.message || "";
-        const isBadAuth   = rideRes.status === 401 || rideMessage.toLowerCase().includes("bad auth") || rideMessage.toLowerCase().includes("unauthorized");
-        const isFound     = rideRes.status < 400 && rideRes.data?.phone && !isBadAuth;
-        const isActive    = isFound && rideRes.data?.status === "active";
+        const isBadAuth   = rideRes.status === 401
+            || rideMessage.toLowerCase().includes("bad auth")
+            || rideMessage.toLowerCase().includes("unauthorized");
+        const isFound  = rideRes.status < 400 && rideRes.data?.phone && !isBadAuth;
+        const isActive = isFound && rideRes.data?.status === "active";
 
-        // Persist audit row
+        // Create the single audit row for this transaction
         const audit = await prisma.rideTransaction.create({
             data: {
                 phone:         String(phone).slice(0, 20),
-                fullName:      rideRes.data?.full_name  ? String(rideRes.data.full_name).slice(0, 200)  : null,
-                accountStatus: rideRes.data?.status     ? String(rideRes.data.status).slice(0, 20)      : null,
+                fullName:      rideRes.data?.full_name ? String(rideRes.data.full_name).slice(0, 200) : null,
+                accountStatus: rideRes.data?.status    ? String(rideRes.data.status).slice(0, 20)     : null,
                 queryStatus:   isFound ? 1 : 0,
                 queryResponse: JSON.stringify(rideRes.data)
             }
-        }).catch(e => { console.error("RideTransaction audit failed:", e.message); return null; });
+        }).catch(e => { console.error("RideTransaction create failed:", e.message); return null; });
 
         auditId = audit?.id ?? null;
 
@@ -82,7 +77,6 @@ const queryRideAccount = async (req, res) => {
                 auditId
             });
         }
-
         if (!isFound) {
             return res.status(404).json({
                 status:  "Error",
@@ -91,7 +85,6 @@ const queryRideAccount = async (req, res) => {
                 auditId
             });
         }
-
         if (!isActive) {
             return res.status(422).json({
                 status:  "Error",
@@ -105,39 +98,33 @@ const queryRideAccount = async (req, res) => {
             status:  "Success",
             message: "Ride account is active",
             data:    rideRes.data,
-            auditId
+            auditId  // ← frontend must send this back in /ride/pay
         });
 
     } catch (error) {
-        return res.status(500).json({
-            status:  "Error",
-            message: error.message,
-            auditId
-        });
+        return res.status(500).json({ status: "Error", message: error.message, auditId });
     }
 };
 
 // ─── POST /ride/pay ───────────────────────────────────────────────────────────
 /**
- * Full payment flow:
- *   1. Query Ride to verify phone is active
- *   2. CBS CreateTransaction (debit customer, credit Ride settlement account)
- *   3. Confirm payment to Ride
+ * Execute payment: CBS debit → Ride confirm.
+ * UPDATES the existing RideTransaction row created by /ride/query (via auditId).
  *
  * Body:
  * {
- *   phone:       "251911259134"   (required)
- *   amount:      300              (required, number > 0)
- *   drAcNo:      "001123..."      (required — customer debit account)
- *   drBranch:    "001"            (optional)
- *   remark:      "Ride top-up"   (optional)
- *   billRefNo:   "BR7654321"      (optional — if omitted, auto-generated)
+ *   auditId:   28              (required — from /ride/query response)
+ *   phone:     "251911259134"  (required)
+ *   amount:    300             (required)
+ *   drAcNo:    "001123..."     (required)
+ *   drBranch:  "001"           (optional)
+ *   remark:    "Ride top-up"  (optional)
+ *   billRefNo: "BR7654321"     (optional — auto-generated if omitted)
  * }
  */
 const payRide = async (req, res) => {
-    const { phone, amount, drAcNo, drBranch, remark, billRefNo: bodyBillRef } = req.body;
+    const { auditId: bodyAuditId, phone, amount, drAcNo, drBranch, remark, billRefNo: bodyBillRef } = req.body;
 
-    // ── Validation ────────────────────────────────────────────────────────────
     const missing = [];
     if (!phone)  missing.push("phone");
     if (!drAcNo) missing.push("drAcNo");
@@ -146,81 +133,41 @@ const payRide = async (req, res) => {
         return res.status(400).json({ status: "Error", message: `Missing or invalid: ${missing.join(", ")}` });
     }
 
-    const txnAmount    = Number(amount);
-    const cbsTraceNo   = `TRC${Date.now()}`;   // internal CBS trace — not from airline
-    const transTime    = new Date().toISOString().replace(/[-T:.Z]/g, "").slice(0, 14); // YYYYMMDDHHmmss
-    const billRefNo    = bodyBillRef || `BR${Date.now()}`;
-    const txnRemark    = remark || `Ride payment - ${phone}`;
+    const txnAmount  = Number(amount);
+    const transTime  = new Date().toISOString().replace(/[-T:.Z]/g, "").slice(0, 14); // YYYYMMDDHHmmss
+    const billRefNo  = bodyBillRef || `BR${Date.now()}`;
+    const txnRemark  = remark || `Ride payment - ${phone}`;
 
-    // Create initial audit row (will be updated as steps complete)
-    let audit = null;
-    try {
-        audit = await prisma.rideTransaction.create({
-            data: {
-                phone:       String(phone).slice(0, 20),
-                amount:      txnAmount,
-                billRefNo:   String(billRefNo).slice(0, 100),
-                transTime,
-                remark:      String(txnRemark).slice(0, 500),
-                traceNumber: cbsTraceNo.slice(0, 150),
-                drAcNo:      String(drAcNo).slice(0, 50),
-                crAcNo:      String(CBS_CR_ACCOUNT).slice(0, 50),
-                queryStatus:   0,
-                paymentStatus: 0,
-                cbsStatus:     0
-            }
-        });
-    } catch (e) {
-        console.error("RideTransaction initial create failed:", e.message);
+    // Resolve audit row: use auditId from query step if provided,
+    // otherwise find the latest pending query row for this phone
+    let auditId = bodyAuditId ? Number(bodyAuditId) : null;
+    if (!auditId) {
+        const existing = await prisma.rideTransaction.findFirst({
+            where: { phone: String(phone).slice(0, 20), queryStatus: 1, paymentStatus: 0 },
+            orderBy: { id: "desc" }
+        }).catch(() => null);
+        auditId = existing?.id ?? null;
     }
 
-    const auditId  = audit?.id ?? null;
+    // Helper: update the single audit row
     const updateAudit = async (data) => {
         if (!auditId) return;
-        await prisma.rideTransaction.update({ where: { id: auditId }, data }).catch(e =>
-            console.error("RideTransaction update failed:", e.message)
-        );
+        await prisma.rideTransaction.update({ where: { id: auditId }, data })
+            .catch(e => console.error("RideTransaction update failed:", e.message));
     };
 
+    // Stamp payment fields onto the row
+    await updateAudit({
+        amount:    txnAmount,
+        billRefNo: String(billRefNo).slice(0, 100),
+        transTime,
+        remark:    String(txnRemark).slice(0, 500),
+        drAcNo:    String(drAcNo).slice(0, 50),
+        crAcNo:    String(CBS_CR_ACCOUNT).slice(0, 50)
+    });
+
     try {
-        // ── Step 1: Query Ride — verify phone is active ───────────────────────
-        const queryPayload = { phone: String(phone) };
-        logJson("RIDE QUERY REQUEST", queryPayload);
-
-        const queryRes = await axios.post(
-            `${RIDE_BASE_URL}/api/v1/bank/enat/bill/query`,
-            queryPayload,
-            { headers: rideHeaders(), auth: rideAuth, httpsAgent, validateStatus: (s) => s >= 200 && s < 600 }
-        );
-
-        logJson("RIDE QUERY RESPONSE", queryRes.data);
-
-        const isActive = queryRes.data?.status === "active";
-        const fullName = queryRes.data?.full_name || "";
-
-        await updateAudit({
-            fullName:      fullName ? String(fullName).slice(0, 200) : null,
-            accountStatus: queryRes.data?.status ? String(queryRes.data.status).slice(0, 20) : null,
-            queryStatus:   isActive ? 1 : 0,
-            queryResponse: JSON.stringify(queryRes.data)
-        });
-
-        if (queryRes.status >= 400 || !queryRes.data?.phone) {
-            await updateAudit({ errorDesc: "Phone not found on Ride" });
-            return res.status(404).json({
-                status:  "Error",
-                message: "Phone number not found on Ride",
-                auditId
-            });
-        }
-
-        if (!isActive) {
-            const msg = `Ride account is not active (status: ${queryRes.data?.status})`;
-            await updateAudit({ errorDesc: msg });
-            return res.status(422).json({ status: "Error", message: msg, auditId });
-        }
-
-        // ── Step 2: CBS CreateTransaction ─────────────────────────────────────
+        // ── Step 1: CBS CreateTransaction ─────────────────────────────────────
         const requestXml = cbsCreateTransaction({
             prd:       CBS_PRD.RIDE,
             drAcNo:    String(drAcNo),
@@ -239,17 +186,20 @@ const payRide = async (req, res) => {
             validateStatus: (s) => s >= 200 && s < 600
         });
 
-        const cbsXml      = cbsRes.data || "";
+        const cbsXml     = cbsRes.data || "";
         logXml("CBS RIDE RESPONSE", cbsXml);
 
-        const cbsFault    = extractXmlTag(cbsXml, "faultstring");
-        const cbsSuccess  = !cbsFault && cbsXml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
-        const cbsRefNo    = extractXmlTag(cbsXml, "FCCREF") || extractXmlTag(cbsXml, "XREF");
-        const cbsErrCode  = extractXmlTag(cbsXml, "ECODE");
-        const cbsErrDesc  = extractXmlTag(cbsXml, "EDESC") || cbsFault;
+        const cbsFault   = extractXmlTag(cbsXml, "faultstring");
+        const cbsSuccess = !cbsFault && cbsXml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
+        const cbsRefNo   = extractXmlTag(cbsXml, "FCCREF") || extractXmlTag(cbsXml, "XREF");
+        const cbsErrCode = extractXmlTag(cbsXml, "ECODE");
+        const cbsErrDesc = extractXmlTag(cbsXml, "EDESC") || cbsFault;
+        // Use CBS book date as the canonical transaction date
+        const cbsBookDate = extractXmlTag(cbsXml, "BOOKDATE"); // e.g. "2026-04-29"
+        const cbsTrnDate  = cbsBookDate ? new Date(cbsBookDate) : new Date();
 
         await updateAudit({
-            cbsRefNo:  cbsRefNo  ? String(cbsRefNo).slice(0, 50)   : null,
+            cbsRefNo:  cbsRefNo ? String(cbsRefNo).slice(0, 50) : null,
             cbsStatus: cbsSuccess ? 1 : 0,
             errorDesc: cbsSuccess ? null : String(cbsErrDesc || "CBS transaction failed").slice(0, 500)
         });
@@ -263,13 +213,13 @@ const payRide = async (req, res) => {
             });
         }
 
-        // ── Step 3: Confirm payment to Ride ───────────────────────────────────
+        // ── Step 2: Confirm payment to Ride ───────────────────────────────────
         const confirmPayload = {
-            amount:     String(txnAmount),
+            amount:      String(txnAmount),
             bill_ref_no: billRefNo,
-            phone:      String(phone),
-            trans_time: transTime,
-            remark:     txnRemark
+            phone:       String(phone),
+            trans_time:  transTime,
+            remark:      txnRemark
         };
 
         logJson("RIDE CONFIRM REQUEST", confirmPayload);
@@ -282,8 +232,8 @@ const payRide = async (req, res) => {
 
         logJson("RIDE CONFIRM RESPONSE", confirmRes.data);
 
-        const ackId        = confirmRes.data?.acknowledgement_id || null;
-        const confirmOk    = confirmRes.status < 400 && !!ackId;
+        const ackId     = confirmRes.data?.acknowledgement_id || null;
+        const confirmOk = confirmRes.status < 400 && !!ackId;
 
         await updateAudit({
             acknowledgementId: ackId ? String(ackId).slice(0, 100) : null,
@@ -300,36 +250,46 @@ const payRide = async (req, res) => {
             });
         }
 
+        // ── Step 3: Write Transactions journal (CBS book date as trnDate) ─────
+        await prisma.transactions.create({
+            data: {
+                trnDate:      cbsTrnDate,
+                processedTime: new Date(),
+                drAcNo:       String(drAcNo).slice(0, 50),
+                crAcNo:       String(CBS_CR_ACCOUNT).slice(0, 50),
+                amount:       txnAmount,
+                currencyCode: "ETB",
+                cbsRefNo:     cbsRefNo ? String(cbsRefNo).slice(0, 50) : null,
+                remarks:      String(txnRemark).slice(0, 500),
+                particulars:  `Ride payment ${phone}`,
+                custIden:     String(phone).slice(0, 50),
+                status:       1,
+                channel:      "RIDE",
+                entryTime:    new Date()
+            }
+        }).catch(e => console.error("Transactions write failed:", e.message));
+
         return res.status(200).json({
             status:            "Success",
             message:           "Ride payment completed successfully",
             acknowledgementId: ackId,
             cbsRefNo,
-            cbsTraceNo,        // our internal CBS trace number
             billRefNo,
             auditId
         });
 
     } catch (error) {
         await updateAudit({ errorDesc: String(error.message).slice(0, 500) });
-        return res.status(500).json({
-            status:  "Error",
-            message: error.message,
-            auditId
-        });
+        return res.status(500).json({ status: "Error", message: error.message, auditId });
     }
 };
 
 // ─── GET /ride/transactions ───────────────────────────────────────────────────
-/**
- * Query Ride transaction audit log.
- * Query params: phone, paymentStatus, cbsStatus, from, to, page, limit
- */
 const getRideTransactions = async (req, res) => {
     const { phone, paymentStatus, cbsStatus, from, to, page = 1, limit = 20 } = req.query;
 
     const where = {};
-    if (phone)         where.phone         = { contains: String(phone) };
+    if (phone)                       where.phone         = { contains: String(phone) };
     if (paymentStatus !== undefined) where.paymentStatus = Number(paymentStatus);
     if (cbsStatus     !== undefined) where.cbsStatus     = Number(cbsStatus);
     if (from || to) {
@@ -339,24 +299,12 @@ const getRideTransactions = async (req, res) => {
     }
 
     const skip = (Number(page) - 1) * Number(limit);
-
     const [rows, total] = await Promise.all([
-        prisma.rideTransaction.findMany({
-            where,
-            orderBy: { entryTime: "desc" },
-            skip,
-            take: Number(limit)
-        }),
+        prisma.rideTransaction.findMany({ where, orderBy: { entryTime: "desc" }, skip, take: Number(limit) }),
         prisma.rideTransaction.count({ where })
     ]);
 
-    return res.status(200).json({
-        status: "Success",
-        total,
-        page:   Number(page),
-        limit:  Number(limit),
-        data:   rows
-    });
+    return res.status(200).json({ status: "Success", total, page: Number(page), limit: Number(limit), data: rows });
 };
 
 export { queryRideAccount, payRide, getRideTransactions };
