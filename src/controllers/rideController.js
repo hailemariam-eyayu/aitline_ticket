@@ -147,7 +147,7 @@ const payRide = async (req, res) => {
     }
 
     const txnAmount    = Number(amount);
-    const traceNumber  = `TRC${Date.now()}`;
+    const cbsTraceNo   = `TRC${Date.now()}`;   // internal CBS trace — not from airline
     const transTime    = new Date().toISOString().replace(/[-T:.Z]/g, "").slice(0, 14); // YYYYMMDDHHmmss
     const billRefNo    = bodyBillRef || `BR${Date.now()}`;
     const txnRemark    = remark || `Ride payment - ${phone}`;
@@ -162,7 +162,7 @@ const payRide = async (req, res) => {
                 billRefNo:   String(billRefNo).slice(0, 100),
                 transTime,
                 remark:      String(txnRemark).slice(0, 500),
-                traceNumber: traceNumber.slice(0, 150),
+                traceNumber: cbsTraceNo.slice(0, 150),
                 drAcNo:      String(drAcNo).slice(0, 50),
                 crAcNo:      String(CBS_CR_ACCOUNT).slice(0, 50),
                 queryStatus:   0,
@@ -301,11 +301,11 @@ const payRide = async (req, res) => {
         }
 
         return res.status(200).json({
-            status:           "Success",
-            message:          "Ride payment completed successfully",
+            status:            "Success",
+            message:           "Ride payment completed successfully",
             acknowledgementId: ackId,
             cbsRefNo,
-            traceNumber,
+            cbsTraceNo,        // our internal CBS trace number
             billRefNo,
             auditId
         });
