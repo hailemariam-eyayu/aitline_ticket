@@ -67,29 +67,42 @@ const logCbsReqRes = async (orderId, type, xml) => {
 
 /**
  * Write a step audit row to FLYGATEDetails.
- * reqType: 1=CBS req, 2=CBS resp, 3=FlyGate confirm resp, 4=refund
+ *
+ * reqType:
+ *   1 = GetOrder (validate) response from FlyGate
+ *   2 = ConfirmOrder response from FlyGate
+ *   3 = (unused — merged into reqType 2)
+ *   4 = Refund (CBS reversal + FlyGate ConfirmRefund)
+ *
+ * Fields mapped from FlyGate response JSON:
+ *   respCode        = HTTP status code (e.g. "200", "500")
+ *   respResult      = raw FlyGate response JSON string
+ *   traceNumber     = response.traceNumber (FlyGate's own trace)
+ *   orderStatusCode = response.statusCodeResponse
+ *   cbsRefNo        = response.enatTransactionNo (CBS ref from FlyGate)
+ *   amount          = response.amount
  */
 const writeFlygateAudit = async ({
-    orderId, reqType, payload, responseCode, resultDesc,
-    cbsRefNo, amount, traceNumber, orderStatusCode, isRefund,
+    orderId, reqType, flyGateData, httpStatus, isRefund,
     customerName, pnr, currency
 }) => {
     try {
+        const d = flyGateData || {};
         await prisma.fLYGATEDetails.create({
             data: {
-                orderId: String(orderId || "").slice(0, 20),
+                orderId:         String(orderId || "").slice(0, 20),
                 reqType,
-                respCode: String(responseCode ?? "").slice(0, 10),
-                respResult: typeof payload === "string" ? payload : JSON.stringify(payload),
-                amount: Number(amount || 0),
-                traceNumber: String(traceNumber || "").slice(0, 50),
-                orderStatusCode: Number(orderStatusCode ?? 0),
-                resultDesc: String(resultDesc || "").slice(0, 100),
-                cbsRefNo: String(cbsRefNo || "").slice(0, 50),
-                isRefund: isRefund ? 1 : 0,
-                customerName: customerName ? String(customerName).slice(0, 500) : null,
-                pnr: pnr ? String(pnr).slice(0, 25) : null,
-                currency: currency ? String(currency).slice(0, 5) : null
+                respCode:        String(httpStatus ?? "").slice(0, 10),
+                respResult:      typeof flyGateData === "string" ? flyGateData : JSON.stringify(flyGateData),
+                amount:          Number(d.amount || d.Amount || 0),
+                traceNumber:     String(d.traceNumber || d.TraceNumber || "").slice(0, 50),
+                orderStatusCode: Number(d.statusCodeResponse ?? d.statusCodeResponseDescription != null ? (d.statusCodeResponse ?? 0) : 0),
+                resultDesc:      String(d.statusCodeResponseDescription || d.message || "").slice(0, 100),
+                cbsRefNo:        String(d.enatTransactionNo || "").slice(0, 50),
+                isRefund:        isRefund ? 1 : 0,
+                customerName:    customerName ? String(customerName).slice(0, 500) : (d.customerName ? String(d.customerName).slice(0, 500) : null),
+                pnr:             pnr ? String(pnr).slice(0, 25) : null,
+                currency:        currency ? String(currency).slice(0, 5) : null
             }
         });
     } catch (e) {
@@ -163,18 +176,13 @@ const validatePNR = async (req, res) => {
         const isSuccess = statusDesc === "Success" || amount > 0;
 
         if (isSuccess) {
-            // Store pending order details in FLYGATEDetails (reqType=0 = pending/validate)
+            // Store pending order details in FLYGATEDetails (reqType=1 = GetOrder response)
             await writeFlygateAudit({
-                orderId: orderid,
-                reqType: 0,
-                payload: response.data,
-                responseCode: "200",
-                resultDesc: "GetOrder Success - Pending",
-                cbsRefNo: "",
-                amount,
-                traceNumber: "",
-                orderStatusCode: 0,
-                isRefund: false,
+                orderId:     orderid,
+                reqType:     1,
+                flyGateData: response.data,
+                httpStatus:  response.status,
+                isRefund:    false,
                 customerName,
                 pnr,
                 currency
@@ -185,6 +193,15 @@ const validatePNR = async (req, res) => {
                 data: { orderId: orderid, amount, customerName, pnr, currency }
             });
         }
+
+        // Store failed validate attempt too
+        await writeFlygateAudit({
+            orderId:     orderid,
+            reqType:     1,
+            flyGateData: response.data,
+            httpStatus:  response.status,
+            isRefund:    false
+        });
 
         return res.status(404).json({
             success: false,
@@ -231,9 +248,9 @@ const confirmOrder = async (req, res) => {
         }
 
         // ── 0b. Get pending order details ───────────────────────────────────
-        // First try local DB (written by validatePNR)
+        // First try local DB (written by validatePNR — reqType=1)
         let pending = await prisma.fLYGATEDetails.findFirst({
-            where: { orderId: orderid, reqType: 0 },
+            where: { orderId: orderid, reqType: 1 },
             orderBy: { auto: 'desc' }
         });
 
@@ -273,19 +290,23 @@ const confirmOrder = async (req, res) => {
 
             // Persist it so next call hits the DB
             await writeFlygateAudit({
-                orderId: orderid, reqType: 0,
-                payload: revalidate.data, responseCode: "200",
-                resultDesc: "GetOrder Re-validated - Pending",
-                cbsRefNo: "", amount: reAmount, traceNumber: "",
-                orderStatusCode: 0, isRefund: false,
+                orderId:     orderid,
+                reqType:     1,
+                flyGateData: revalidate.data,
+                httpStatus:  revalidate.status,
+                isRefund:    false,
                 customerName: pending.customerName,
                 pnr:          pending.pnr,
                 currency:     pending.currency
             });
         }
 
-        const amount       = Number(req.body.amount ?? pending?.amount ?? 0);
-        const customerName = bodyCustomerName || pending?.customerName || "Flygate Customer";
+        // Parse pending data — respResult holds the raw FlyGate JSON
+        let pendingData = {};
+        try { pendingData = JSON.parse(pending.respResult || "{}"); } catch {}
+
+        const amount       = Number(req.body.amount ?? pending?.amount ?? pendingData?.amount ?? 0);
+        const customerName = bodyCustomerName || pending?.customerName || pendingData?.customerName || "Flygate Customer";
         const orderPnr     = pnr || pending?.pnr || "";
         const currency     = bodyCurrency || pending?.currency || "ETB";
 
@@ -306,14 +327,7 @@ const confirmOrder = async (req, res) => {
         });
 
         await logCbsReqRes(orderid, 1, soapRequestXml);
-        await writeFlygateAudit({
-            orderId: orderid, reqType: 1,
-            payload: soapRequestXml, responseCode: "REQ",
-            resultDesc: "CBS CreateTransaction Request",
-            cbsRefNo: "", amount, traceNumber: finalTraceNumber,
-            orderStatusCode: 0, isRefund: false,
-            customerName, pnr: orderPnr, currency
-        });
+        // CBS req/resp logged to CbsReqRes only — not to FLYGATEDetails
 
         // ── 2. Call CBS ─────────────────────────────────────────────────────
         const cbsResponseXml = await callCbs(soapRequestXml, 'CREATETRANSACTION_FSFS_REQ');
@@ -327,16 +341,7 @@ const confirmOrder = async (req, res) => {
         // Use CBS book date as canonical transaction date (e.g. "2026-04-29")
         const cbsBookDate = extractXmlTag(cbsResponseXml, "BOOKDATE");
         const cbsTrnDate  = cbsBookDate ? new Date(cbsBookDate) : new Date();
-
-        await writeFlygateAudit({
-            orderId: orderid, reqType: 2,
-            payload: cbsResponseXml,
-            responseCode: isSuccess ? "SUCCESS" : "FAILURE",
-            resultDesc: isSuccess ? "CBS CreateTransaction Success" : (cbsErrorDesc || "CBS transaction failed"),
-            cbsRefNo: finalReferenceNumber || "", amount, traceNumber: finalTraceNumber,
-            orderStatusCode: isSuccess ? 1 : 0, isRefund: false,
-            customerName, pnr: orderPnr, currency
-        });
+        // CBS result logged to CbsReqRes only
 
         if (!isSuccess) {
             const err = new Error(`CBS Error: ${cbsErrorDesc || "Transaction failed"}`);
@@ -415,14 +420,16 @@ const confirmOrder = async (req, res) => {
             throw err;
         }
 
-        // ── 4. Audit FlyGate confirm success ────────────────────────────────
+        // ── 4. Write FLYGATEDetails — ConfirmOrder response (reqType=2) ────
         await writeFlygateAudit({
-            orderId: orderid, reqType: 3,
-            payload: flyGateResponse.data, responseCode: "200",
-            resultDesc: "Flygate ConfirmOrder Success",
-            cbsRefNo: finalReferenceNumber, amount, traceNumber: finalTraceNumber,
-            orderStatusCode: 1, isRefund: false,
-            customerName, pnr: orderPnr, currency
+            orderId:     orderid,
+            reqType:     2,
+            flyGateData: flyGateResponse.data,
+            httpStatus:  flyGateResponse.status,
+            isRefund:    false,
+            customerName,
+            pnr:         orderPnr,
+            currency
         });
 
         // ── 5. Write FlygateTransactions (confirmed record) ─────────────────
@@ -523,14 +530,21 @@ const refundRequest = async (req, res) => {
         const refundError = extractXmlTag(cbsResponseXml, "EDESC");
         const reverseRef = extractXmlTag(cbsResponseXml, "FCCREF") || ReferenceNumber;
 
-        // ── 3. Audit CBS reversal ────────────────────────────────────────────
+        // ── 3. Write FLYGATEDetails — CBS reversal result (reqType=4, isRefund=1) ─
+        // Build a synthetic FlyGate-style object from CBS response for consistent storage
         await writeFlygateAudit({
-            orderId, reqType: 4,
-            payload: cbsResponseXml,
-            responseCode: isSuccess ? "SUCCESS" : "FAILURE",
-            resultDesc: isSuccess ? "CBS Reversal Success" : (refundError || "CBS reversal failed"),
-            cbsRefNo: reverseRef, amount: Number(amount || 0),
-            traceNumber: "", orderStatusCode: isSuccess ? 1 : 0, isRefund: true
+            orderId:     orderId,
+            reqType:     4,
+            flyGateData: {
+                amount:                      Number(amount || 0),
+                traceNumber:                 reverseRef,
+                statusCodeResponse:          isSuccess ? 1 : 0,
+                statusCodeResponseDescription: isSuccess ? "CBS Reversal Success" : (refundError || "CBS reversal failed"),
+                enatTransactionNo:           reverseRef,
+                message:                     isSuccess ? "CBS Reversal Success" : (refundError || "CBS reversal failed")
+            },
+            httpStatus:  isSuccess ? 200 : 400,
+            isRefund:    true
         });
 
         // ── 4. Write RefundLedger ────────────────────────────────────────────
