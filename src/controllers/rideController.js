@@ -24,10 +24,10 @@ const logXml = (label, xml) =>
 // ─── POST /ride/query ─────────────────────────────────────────────────────────
 /**
  * Verify phone is an active Ride account.
- * Creates the RideTransaction audit row and returns auditId.
- * The frontend must pass auditId back to /ride/pay.
+ * INSERT into RideTransaction ONLY when account is active.
+ * Returns auditId — frontend must pass it back to /ride/pay.
  *
- * Body: { phone: "251911259134" }
+ * DB writes: 1 INSERT (only on success)
  */
 const queryRideAccount = async (req, res) => {
     const { phone } = req.body;
@@ -37,8 +37,6 @@ const queryRideAccount = async (req, res) => {
 
     const payload = { phone: String(phone) };
     logJson("RIDE QUERY REQUEST", payload);
-
-    let auditId = null;
 
     try {
         const rideRes = await axios.post(
@@ -56,60 +54,56 @@ const queryRideAccount = async (req, res) => {
         const isFound  = rideRes.status < 400 && rideRes.data?.phone && !isBadAuth;
         const isActive = isFound && rideRes.data?.status === "active";
 
-        // Create the single audit row for this transaction
+        // ── Only insert a row when account is confirmed active ────────────────
+        if (!isActive) {
+            const msg = isBadAuth
+                ? `Ride API authentication failed: ${rideMessage}`
+                : !isFound
+                    ? (rideMessage || "Phone number not found on Ride")
+                    : `Ride account is not active (status: ${rideRes.data?.status})`;
+
+            const status = isBadAuth ? 401 : !isFound ? 404 : 422;
+            return res.status(status).json({
+                status:  "Error",
+                message: msg,
+                data:    rideRes.data
+            });
+        }
+
+        // Active — create the single audit row
         const audit = await prisma.rideTransaction.create({
             data: {
                 phone:         String(phone).slice(0, 20),
-                fullName:      rideRes.data?.full_name ? String(rideRes.data.full_name).slice(0, 200) : null,
-                accountStatus: rideRes.data?.status    ? String(rideRes.data.status).slice(0, 20)     : null,
-                queryStatus:   isFound ? 1 : 0,
+                fullName:      rideRes.data.full_name ? String(rideRes.data.full_name).slice(0, 200) : null,
+                accountStatus: String(rideRes.data.status).slice(0, 20),
+                queryStatus:   1,
                 queryResponse: JSON.stringify(rideRes.data)
             }
-        }).catch(e => { console.error("RideTransaction create failed:", e.message); return null; });
-
-        auditId = audit?.id ?? null;
-
-        if (isBadAuth) {
-            return res.status(401).json({
-                status:  "Error",
-                message: `Ride API authentication failed: ${rideMessage}`,
-                data:    rideRes.data,
-                auditId
-            });
-        }
-        if (!isFound) {
-            return res.status(404).json({
-                status:  "Error",
-                message: rideMessage || "Phone number not found on Ride",
-                data:    rideRes.data,
-                auditId
-            });
-        }
-        if (!isActive) {
-            return res.status(422).json({
-                status:  "Error",
-                message: `Ride account is not active (status: ${rideRes.data?.status})`,
-                data:    rideRes.data,
-                auditId
-            });
-        }
+        });
 
         return res.status(200).json({
             status:  "Success",
             message: "Ride account is active",
             data:    rideRes.data,
-            auditId  // ← frontend must send this back in /ride/pay
+            auditId: audit.id   // ← frontend must send this back in /ride/pay
         });
 
     } catch (error) {
-        return res.status(500).json({ status: "Error", message: error.message, auditId });
+        return res.status(500).json({ status: "Error", message: error.message });
     }
 };
 
 // ─── POST /ride/pay ───────────────────────────────────────────────────────────
 /**
  * Execute payment: CBS debit → Ride confirm.
- * UPDATES the existing RideTransaction row created by /ride/query (via auditId).
+ * All DB operations are UPDATEs on the single row created by /ride/query.
+ * One INSERT into Transactions on full success.
+ *
+ * DB writes:
+ *   UPDATE RideTransaction — payment fields (amount, acno, billRef…)
+ *   UPDATE RideTransaction — CBS result (cbsRefNo, cbsStatus)
+ *   UPDATE RideTransaction — confirm result (ackId, paymentStatus) or reversal fields
+ *   INSERT Transactions    — only on full success
  *
  * Body:
  * {
@@ -117,14 +111,14 @@ const queryRideAccount = async (req, res) => {
  *   phone:     "251911259134"  (required)
  *   amount:    300             (required)
  *   drAcNo:    "001123..."     (required)
- *   drBranch:  "001"           (optional)
  *   remark:    "Ride top-up"  (optional)
  *   billRefNo: "BR7654321"     (optional — auto-generated if omitted)
  * }
  */
 const payRide = async (req, res) => {
-    const { auditId: bodyAuditId, phone, amount, drAcNo, drBranch, remark, billRefNo: bodyBillRef } = req.body;
+    const { auditId: bodyAuditId, phone, amount, drAcNo, remark, billRefNo: bodyBillRef } = req.body;
 
+    // ── Validation ────────────────────────────────────────────────────────────
     const missing = [];
     if (!phone)  missing.push("phone");
     if (!drAcNo) missing.push("drAcNo");
@@ -133,15 +127,14 @@ const payRide = async (req, res) => {
         return res.status(400).json({ status: "Error", message: `Missing or invalid: ${missing.join(", ")}` });
     }
 
-    const txnAmount  = Number(amount);
-    const transTime  = new Date().toISOString().replace(/[-T:.Z]/g, "").slice(0, 14); // YYYYMMDDHHmmss
-    const billRefNo  = bodyBillRef || `BR${Date.now()}`;
-    const txnRemark  = remark || `Ride payment - ${phone}`;
-    // Branch = first 3 chars of account number (e.g. "0011230708313001" → "001")
-    const resolvedBranch = drBranch || String(drAcNo).slice(0, 3);
+    const txnAmount      = Number(amount);
+    const transTime      = new Date().toISOString().replace(/[-T:.Z]/g, "").slice(0, 14);
+    const billRefNo      = bodyBillRef || `BR${Date.now()}`;
+    const txnRemark      = remark || `Ride payment - ${phone}`;
+    const resolvedBranch = String(drAcNo).slice(0, 3); // branch = first 3 chars of account
 
-    // Resolve audit row: use auditId from query step if provided,
-    // otherwise find the latest pending query row for this phone
+    // ── Resolve the audit row ─────────────────────────────────────────────────
+    // Priority: auditId from request → latest active+unpaid row for this phone
     let auditId = bodyAuditId ? Number(bodyAuditId) : null;
     if (!auditId) {
         const existing = await prisma.rideTransaction.findFirst({
@@ -151,14 +144,20 @@ const payRide = async (req, res) => {
         auditId = existing?.id ?? null;
     }
 
-    // Helper: update the single audit row
+    if (!auditId) {
+        return res.status(400).json({
+            status:  "Error",
+            message: "No verified query found for this phone. Please call /ride/query first."
+        });
+    }
+
+    // Single helper — all DB changes go through here (UPDATE only)
     const updateAudit = async (data) => {
-        if (!auditId) return;
         await prisma.rideTransaction.update({ where: { id: auditId }, data })
             .catch(e => console.error("RideTransaction update failed:", e.message));
     };
 
-    // Stamp payment fields onto the row
+    // ── UPDATE 1: stamp payment intent fields ─────────────────────────────────
     await updateAudit({
         amount:    txnAmount,
         billRefNo: String(billRefNo).slice(0, 100),
@@ -169,7 +168,7 @@ const payRide = async (req, res) => {
     });
 
     try {
-        // ── Step 1: CBS CreateTransaction ─────────────────────────────────────
+        // ── CBS CreateTransaction ─────────────────────────────────────────────
         const requestXml = cbsCreateTransaction({
             prd:       CBS_PRD.RIDE,
             drAcNo:    String(drAcNo),
@@ -188,18 +187,18 @@ const payRide = async (req, res) => {
             validateStatus: (s) => s >= 200 && s < 600
         });
 
-        const cbsXml     = cbsRes.data || "";
+        const cbsXml      = cbsRes.data || "";
         logXml("CBS RIDE RESPONSE", cbsXml);
 
-        const cbsFault   = extractXmlTag(cbsXml, "faultstring");
-        const cbsSuccess = !cbsFault && cbsXml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
-        const cbsRefNo   = extractXmlTag(cbsXml, "FCCREF") || extractXmlTag(cbsXml, "XREF");
-        const cbsErrCode = extractXmlTag(cbsXml, "ECODE");
-        const cbsErrDesc = extractXmlTag(cbsXml, "EDESC") || cbsFault;
-        // Use CBS book date as the canonical transaction date
-        const cbsBookDate = extractXmlTag(cbsXml, "BOOKDATE"); // e.g. "2026-04-29"
+        const cbsFault    = extractXmlTag(cbsXml, "faultstring");
+        const cbsSuccess  = !cbsFault && cbsXml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
+        const cbsRefNo    = extractXmlTag(cbsXml, "FCCREF") || extractXmlTag(cbsXml, "XREF");
+        const cbsErrCode  = extractXmlTag(cbsXml, "ECODE");
+        const cbsErrDesc  = extractXmlTag(cbsXml, "EDESC") || cbsFault;
+        const cbsBookDate = extractXmlTag(cbsXml, "BOOKDATE");
         const cbsTrnDate  = cbsBookDate ? new Date(cbsBookDate) : new Date();
 
+        // ── UPDATE 2: CBS result ──────────────────────────────────────────────
         await updateAudit({
             cbsRefNo:  cbsRefNo ? String(cbsRefNo).slice(0, 50) : null,
             cbsStatus: cbsSuccess ? 1 : 0,
@@ -215,7 +214,7 @@ const payRide = async (req, res) => {
             });
         }
 
-        // ── Step 2: Confirm payment to Ride ───────────────────────────────────
+        // ── Ride ConfirmPayment ───────────────────────────────────────────────
         const confirmPayload = {
             amount:      String(txnAmount),
             bill_ref_no: billRefNo,
@@ -237,60 +236,54 @@ const payRide = async (req, res) => {
         const ackId     = confirmRes.data?.acknowledgement_id || null;
         const confirmOk = confirmRes.status < 400 && !!ackId;
 
-        await updateAudit({
-            acknowledgementId: ackId ? String(ackId).slice(0, 100) : null,
-            paymentStatus:     confirmOk ? 1 : 0,
-            confirmResponse:   JSON.stringify(confirmRes.data),
-            errorDesc:         confirmOk ? null : String(confirmRes.data?.message || "Ride confirm failed").slice(0, 500)
-        });
-
         if (!confirmOk) {
-            // ── Auto-reverse CBS since Ride confirm failed ────────────────────
+            // ── Ride confirm failed → auto-reverse CBS ────────────────────────
             const reversal = await attemptAutoReversal(cbsRefNo, CBS_RT_URL, httpsAgent, axios.post.bind(axios));
+
+            // ── UPDATE 3a: confirm failure + reversal result ──────────────────
             await updateAudit({
+                confirmResponse:   JSON.stringify(confirmRes.data),
                 paymentStatus:     0,
                 autoReversed:      reversal.success ? 1 : 0,
                 autoReversalRef:   reversal.reversalRef,
                 autoReversalError: reversal.error,
                 errorDesc:         String(confirmRes.data?.message || "Ride confirm failed").slice(0, 500)
             });
-            // Also mark the Transactions row as auto-reversed
-            if (cbsRefNo) {
-                await prisma.transactions.updateMany({
-                    where: { cbsRefNo: String(cbsRefNo) },
-                    data: {
-                        status:            0,
-                        autoReversed:      reversal.success ? 1 : 0,
-                        autoReversalRef:   reversal.reversalRef,
-                        autoReversalError: reversal.error
-                    }
-                }).catch(e => console.error("Transactions auto-reversal update failed:", e.message));
-            }
+
             return res.status(400).json({
-                status:        "Error",
-                message:       confirmRes.data?.message || "Ride payment confirmation failed",
-                autoReversed:  reversal.success,
+                status:          "Error",
+                message:         confirmRes.data?.message || "Ride payment confirmation failed",
+                autoReversed:    reversal.success,
                 autoReversalRef: reversal.reversalRef,
                 auditId
             });
         }
 
-        // ── Step 3: Write Transactions journal (CBS book date as trnDate) ─────
+        // ── UPDATE 3b: full success ───────────────────────────────────────────
+        await updateAudit({
+            acknowledgementId: String(ackId).slice(0, 100),
+            confirmResponse:   JSON.stringify(confirmRes.data),
+            paymentStatus:     1,
+            errorDesc:         null
+        });
+
+        // ── INSERT Transactions (one row, only on full success) ───────────────
         await prisma.transactions.create({
             data: {
-                trnDate:      cbsTrnDate,
+                trnDate:       cbsTrnDate,
                 processedTime: new Date(),
-                drAcNo:       String(drAcNo).slice(0, 50),
-                crAcNo:       String(CBS_CR_ACCOUNT).slice(0, 50),
-                amount:       txnAmount,
-                currencyCode: "ETB",
-                cbsRefNo:     cbsRefNo ? String(cbsRefNo).slice(0, 50) : null,
-                remarks:      String(txnRemark).slice(0, 500),
-                particulars:  `Ride payment ${phone}`,
-                custIden:     String(phone).slice(0, 50),
-                status:       1,
-                channel:      "RIDE",
-                entryTime:    new Date()
+                drAcNo:        String(drAcNo).slice(0, 50),
+                crAcNo:        String(CBS_CR_ACCOUNT).slice(0, 50),
+                branchCode:    resolvedBranch,
+                amount:        txnAmount,
+                currencyCode:  "ETB",
+                cbsRefNo:      cbsRefNo ? String(cbsRefNo).slice(0, 50) : null,
+                remarks:       String(txnRemark).slice(0, 500),
+                particulars:   `Ride payment ${phone}`,
+                custIden:      String(phone).slice(0, 50),
+                status:        1,
+                channel:       "RIDE",
+                entryTime:     new Date()
             }
         }).catch(e => console.error("Transactions write failed:", e.message));
 
