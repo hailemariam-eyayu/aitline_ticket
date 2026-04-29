@@ -2,7 +2,7 @@ import axios from "axios";
 import https from "https";
 import { config } from "dotenv";
 import { prisma } from "../config/db.js";
-import { cbsCreateTransaction, CBS_PRD, getOffsetAccount, attemptAutoReversal, extractXmlTag } from "../services/cbsXmlService.js";
+import { cbsCreateTransaction, CBS_PRD, getOffsetAccount, attemptAutoReversal, insertTransactionJournal, extractXmlTag } from "../services/cbsXmlService.js";
 config();
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
@@ -181,6 +181,11 @@ const payRide = async (req, res) => {
 
         logXml("CBS RIDE REQUEST", requestXml);
 
+        // Log CBS request to CbsReqRes
+        await prisma.cbsReqRes.create({
+            data: { orderId: String(phone).slice(0, 20), type: 1, data: requestXml }
+        }).catch(e => console.error("CbsReqRes req write failed:", e.message));
+
         const cbsRes = await axios.post(CBS_RT_URL, requestXml, {
             headers: { "Content-Type": "text/xml;charset=utf-8", SOAPAction: "CREATETRANSACTION_FSFS_REQ" },
             httpsAgent,
@@ -189,6 +194,11 @@ const payRide = async (req, res) => {
 
         const cbsXml      = cbsRes.data || "";
         logXml("CBS RIDE RESPONSE", cbsXml);
+
+        // Log CBS response to CbsReqRes
+        await prisma.cbsReqRes.create({
+            data: { orderId: String(phone).slice(0, 20), type: 2, data: cbsXml }
+        }).catch(e => console.error("CbsReqRes resp write failed:", e.message));
 
         const cbsFault    = extractXmlTag(cbsXml, "faultstring");
         const cbsSuccess  = !cbsFault && cbsXml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
@@ -267,25 +277,23 @@ const payRide = async (req, res) => {
             errorDesc:         null
         });
 
-        // ── INSERT Transactions (one row, only on full success) ───────────────
-        await prisma.transactions.create({
-            data: {
-                trnDate:       cbsTrnDate,
-                processedTime: new Date(),
-                drAcNo:        String(drAcNo).slice(0, 50),
-                crAcNo:        String(CBS_CR_ACCOUNT).slice(0, 50),
-                branchCode:    resolvedBranch,
-                amount:        txnAmount,
-                currencyCode:  "ETB",
-                cbsRefNo:      cbsRefNo ? String(cbsRefNo).slice(0, 50) : null,
-                remarks:       String(txnRemark).slice(0, 500),
-                particulars:   `Ride payment ${phone}`,
-                custIden:      String(phone).slice(0, 50),
-                status:        1,
-                channel:       "RIDE",
-                entryTime:     new Date()
-            }
-        }).catch(e => console.error("Transactions write failed:", e.message));
+        // ── INSERT Transactions journal (DR + CR rows, only on full success) ─
+        await insertTransactionJournal({
+            prisma,
+            channel:        "RIDE",
+            drAcNo:         String(drAcNo),
+            crAcNo:         CBS_CR_ACCOUNT,
+            amount:         txnAmount,
+            cbsRefNo:       cbsRefNo,
+            trnDate:        cbsTrnDate,
+            utility:        String(phone),              // phone = "what for"
+            utilRefNo:      billRefNo,                  // our bill reference
+            particulars:    `Ride payment ${phone}`,
+            branchCode:     resolvedBranch,
+            currency:       "ETB",
+            comAmount:      Number(extractXmlTag(cbsXml, "CHGAMT") || 0),
+            disasterRiskAmt: Number(extractXmlTag(cbsXml, "LCYCHG") || 0)
+        });
 
         return res.status(200).json({
             status:            "Success",

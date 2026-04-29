@@ -9,6 +9,7 @@ import {
     cbsCreateTransaction,
     cbsReverseTransaction,
     attemptAutoReversal,
+    insertTransactionJournal,
     extractXmlTag
 } from "../services/cbsXmlService.js";
 config();
@@ -330,7 +331,6 @@ const confirmOrder = async (req, res) => {
 
         await logCbsReqRes(orderid, 1, soapRequestXml);
         // CBS req/resp logged to CbsReqRes only — not to FLYGATEDetails
-
         // ── 2. Call CBS ─────────────────────────────────────────────────────
         const cbsResponseXml = await callCbs(soapRequestXml, 'CREATETRANSACTION_FSFS_REQ');
         await logCbsReqRes(orderid, 2, cbsResponseXml);
@@ -456,29 +456,24 @@ const confirmOrder = async (req, res) => {
             }
         }).catch(e => console.error("FlygateTransactions write failed:", e.message));
 
-        // ── 6. Write Transactions (CBS journal — trnDate from CBS BOOKDATE) ──
-        await prisma.transactions.create({
-            data: {
-                orderId:      String(orderid).slice(0, 20),
-                pnr:          orderPnr ? String(orderPnr).slice(0, 25) : null,
-                trnDate:      cbsTrnDate,
-                processedTime: new Date(),
-                drAcNo:       String(beneficiaryAcno).slice(0, 50),
-                crAcNo:       getOffsetAccount("AIRLINE").slice(0, 50),
-                branchCode:   resolvedBranch ? String(resolvedBranch).slice(0, 10) : null,
-                amount:       Number(amount),
-                currencyCode: String(currency).slice(0, 5),
-                customerName: String(customerName).slice(0, 500),
-                cbsRefNo:     String(finalReferenceNumber).slice(0, 50),
-                uniqueId:     `${orderid}-${finalReferenceNumber}`.slice(0, 50),
-                crDr:         "DEBIT",
-                remarks:      remark ? String(remark).slice(0, 500) : `Airline payment ${orderid}`,
-                particulars:  `FlyGate order ${orderid}`,
-                status:       1,
-                channel:      "API",
-                entryTime:    new Date()
-            }
-        }).catch(e => console.error("Transactions write failed:", e.message));
+        // ── 6. Write Transactions journal (DR + CR rows, trnDate from CBS BOOKDATE)
+        const flyGateTraceNumber = flyGateResponse.data?.traceNumber || flyGateResponse.data?.TraceNumber || finalTraceNumber;
+        await insertTransactionJournal({
+            prisma,
+            channel:        "AIRLINE",
+            drAcNo:         String(beneficiaryAcno),
+            crAcNo:         getOffsetAccount("AIRLINE"),
+            amount:         Number(amount),
+            cbsRefNo:       finalReferenceNumber,
+            trnDate:        cbsTrnDate,
+            utility:        orderPnr || orderid,          // PNR or orderId
+            utilRefNo:      flyGateTraceNumber,           // FlyGate traceNumber
+            particulars:    `Airline ticket - ${orderid}`,
+            branchCode:     resolvedBranch,
+            currency:       currency,
+            comAmount:      Number(extractXmlTag(cbsResponseXml, "CHGAMT") || 0),
+            disasterRiskAmt: Number(extractXmlTag(cbsResponseXml, "LCYCHG") || 0)
+        });
 
         return res.json({
             status: "Success",

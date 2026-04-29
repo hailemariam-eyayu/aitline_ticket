@@ -9,8 +9,6 @@ const CBS_REV_SOURCE = (process.env.cbs_rev_source || process.env.cbs_source || 
 const CBS_REV_USER   = (process.env.cbs_rev_user   || process.env.cbs_user   || "ADCUSER").trim();
 
 // ─── Per-channel settlement (credit) accounts ─────────────────────────────────
-// Each channel debits the customer and credits its own settlement GL/account.
-// Set the correct account numbers in .env — these are just safe fallbacks.
 const CBS_OFFSET_ACCOUNTS = {
     AIRLINE:  (process.env.cbs_offset_airline  || process.env.cbs_offset_account || "0461112216017001").trim(),
     TELEBIRR: (process.env.cbs_offset_telebirr || process.env.cbs_offset_account || "0461112216017001").trim(),
@@ -21,20 +19,29 @@ const CBS_OFFSET_ACCOUNTS = {
     OTHER:    (process.env.cbs_offset_account  || "0461112216017001").trim(),
 };
 
-// Convenience: get offset account for a channel (falls back to OTHER)
 const getOffsetAccount = (channel) =>
     CBS_OFFSET_ACCOUNTS[String(channel).toUpperCase()] || CBS_OFFSET_ACCOUNTS.OTHER;
 
 // ─── PRD codes per channel ────────────────────────────────────────────────────
-// Add new channels here as needed
 const CBS_PRD = {
-    AIRLINE:  "ATAD",   // Ethiopian Airlines ticket payment
-    TELEBIRR: "TBTT",   // Telebirr transfer
-    RIDE:     "ATAD",   // Ride ET bill payment
-    BILL:     "ATAD",   // Generic bill payment
-    MPESA:    "MPSA",   // M-Pesa
-    IPS:      "ATAS",   // IPS / interbank
-    OTHER:    "ATAD"    // fallback
+    AIRLINE:  "ATAD",
+    TELEBIRR: "TBTT",
+    RIDE:     "ATAD",
+    BILL:     "ATAD",
+    MPESA:    "MPSA",
+    IPS:      "ATAS",
+    OTHER:    "ATAD"
+};
+
+// ─── Module type per channel (matches CBS ModuleType codes) ──────────────────
+const CBS_MODULE_TYPE = {
+    AIRLINE:  153,
+    TELEBIRR: 153,
+    RIDE:     153,
+    BILL:     16,
+    MPESA:    153,
+    IPS:      153,
+    OTHER:    153
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -52,27 +59,16 @@ const extractXmlTag = (xml, tag) => {
 // ─── Core CBS CreateTransaction builder ───────────────────────────────────────
 /**
  * Build a CBS CREATETRANSACTION_FSFS_REQ SOAP envelope.
- * This is the single function used by ALL integrations (airline, Ride, Telebirr, etc.)
  *
  * @param {object}        p
- * @param {string}        p.prd        - CBS product code. Use CBS_PRD constants or pass directly.
- * @param {string}        p.drAcNo     - Debit account number (customer account)
- * @param {string}        p.crAcNo     - Credit account number (settlement/offset account)
+ * @param {string}        p.prd        - CBS product code (use CBS_PRD constants)
+ * @param {string}        p.drAcNo     - Debit account number
+ * @param {string}        p.crAcNo     - Credit account number
  * @param {number|string} p.amount     - Transaction amount
- * @param {string}        [p.drBranch] - Debit branch code (defaults to CBS_BRANCH env)
- * @param {string}        [p.crBranch] - Credit branch code (defaults to CBS_OFFSET_BRANCH env)
- * @param {string}        [p.currency] - Currency code (default: ETB)
- * @param {string}        [p.narrative]- Transaction narrative shown in CBS
- *
- * @returns {string} SOAP XML string ready to POST to CBS endpoint
- *
- * @example
- * // Airline
- * cbsCreateTransaction({ prd: CBS_PRD.AIRLINE, drAcNo: acno, crAcNo: offsetAc, amount: 4500, narrative: "Airline - ET1234" })
- *
- * @example
- * // Telebirr
- * cbsCreateTransaction({ prd: CBS_PRD.TELEBIRR, drAcNo: acno, crAcNo: telebirrAc, amount: 300, narrative: "Telebirr 0911..." })
+ * @param {string}        [p.drBranch] - Debit branch (defaults to CBS_BRANCH)
+ * @param {string}        [p.crBranch] - Credit branch (defaults to CBS_OFFSET_BRANCH)
+ * @param {string}        [p.currency] - Currency code (default ETB)
+ * @param {string}        [p.narrative]- Narrative shown in CBS
  */
 const cbsCreateTransaction = ({ prd, drAcNo, crAcNo, amount, drBranch, crBranch, currency = "ETB", narrative = "" }) => {
     const txnAmount    = normalizeAmount(amount);
@@ -113,13 +109,11 @@ const cbsCreateTransaction = ({ prd, drAcNo, crAcNo, amount, drBranch, crBranch,
 // ─── CBS ReverseTransaction builder ──────────────────────────────────────────
 /**
  * Build a CBS REVERSETRANSACTION_FSFS_REQ SOAP envelope.
+ * Branch is auto-derived from first 3 chars of FCCREF.
  * @param {string} fccRef - The FCCREF returned by CBS on the original transaction
- *                          Branch is auto-derived from first 3 chars of FCCREF
- *                          (e.g. "001ATAD22346A046" → branch "001")
  */
 const cbsReverseTransaction = (fccRef) => {
-    // Branch = first 3 chars of FCCREF (same branch that created the transaction)
-    const branch = fccRef ? String(fccRef).slice(0, 3) : CBS_BRANCH;
+    const branch   = fccRef ? String(fccRef).slice(0, 3) : CBS_BRANCH;
     const correlId = `CORR${Date.now()}`;
 
     return `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.com/service/FCUBSRTService">
@@ -149,13 +143,7 @@ const cbsReverseTransaction = (fccRef) => {
 // ─── Auto-reversal helper ─────────────────────────────────────────────────────
 /**
  * Attempt to reverse a CBS transaction silently.
- * Returns { success, reversalRef, error }.
- * Never throws — caller decides what to do with the result.
- *
- * @param {string} fccRef       - CBS FCCREF to reverse
- * @param {string} cbsRtUrl     - CBS RT endpoint URL
- * @param {object} httpsAgent   - https.Agent (TLS config)
- * @param {Function} axiosPost  - axios.post (injected to avoid circular deps)
+ * Returns { success, reversalRef, error }. Never throws.
  */
 const attemptAutoReversal = async (fccRef, cbsRtUrl, httpsAgent, axiosPost) => {
     try {
@@ -168,10 +156,10 @@ const attemptAutoReversal = async (fccRef, cbsRtUrl, httpsAgent, axiosPost) => {
             validateStatus: (s) => s >= 200 && s < 600
         });
 
-        const xml        = res.data || "";
-        const isSuccess  = xml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
+        const xml         = res.data || "";
+        const isSuccess   = xml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
         const reversalRef = extractXmlTag(xml, "FCCREF") || fccRef;
-        const errDesc    = extractXmlTag(xml, "EDESC") || extractXmlTag(xml, "faultstring");
+        const errDesc     = extractXmlTag(xml, "EDESC") || extractXmlTag(xml, "faultstring");
 
         console.log(`[AUTO-REVERSAL] ${isSuccess ? "SUCCESS" : "FAILED"} — ref: ${reversalRef}${errDesc ? " | " + errDesc : ""}`);
         return { success: isSuccess, reversalRef: isSuccess ? reversalRef : null, error: isSuccess ? null : (errDesc || "Reversal failed") };
@@ -181,8 +169,74 @@ const attemptAutoReversal = async (fccRef, cbsRtUrl, httpsAgent, axiosPost) => {
     }
 };
 
+// ─── Transactions journal helper ──────────────────────────────────────────────
+/**
+ * Insert DR + CR rows into the Transactions table for a completed CBS transaction.
+ * Matches the existing Transactions table structure (two rows per transaction).
+ *
+ * @param {object} p
+ * @param {object} p.prisma        - Prisma client
+ * @param {string} p.channel       - "AIRLINE" | "RIDE" | "TELEBIRR" etc.
+ * @param {string} p.drAcNo        - Debit account number
+ * @param {string} p.crAcNo        - Credit account number
+ * @param {number} p.amount        - Transaction amount
+ * @param {string} p.cbsRefNo      - CBS FCCREF (used as BatchId + CustIden)
+ * @param {Date}   p.trnDate       - Transaction date from CBS BOOKDATE
+ * @param {string} p.utility       - PNR (airline) or phone (ride) — the "what for"
+ * @param {string} p.utilRefNo     - FlyGate traceNumber or Ride billRefNo
+ * @param {string} p.particulars   - Free text description
+ * @param {string} [p.branchCode]  - Branch code (first 3 chars of drAcNo)
+ * @param {string} [p.currency]    - Currency code (default ETB)
+ * @param {number} [p.comAmount]   - Charge amount from CBS
+ * @param {number} [p.disasterRiskAmt] - Disaster risk charge from CBS
+ */
+const insertTransactionJournal = async ({
+    prisma, channel, drAcNo, crAcNo, amount, cbsRefNo,
+    trnDate, utility, utilRefNo, particulars,
+    branchCode, currency = "ETB", comAmount = 0, disasterRiskAmt = 0
+}) => {
+    const moduleType  = CBS_MODULE_TYPE[String(channel).toUpperCase()] ?? 153;
+    const uniqueId    = String(Date.now());          // shared by DR + CR rows
+    const batchId     = cbsRefNo || "";              // CBS FCCREF = BatchId
+    const iRefNo      = utilRefNo || cbsRefNo || ""; // our ref = IRefNo
+    const brn         = branchCode || String(drAcNo).slice(0, 3);
+    const now         = new Date();
+
+    const base = {
+        batchId:        batchId.slice(0, 50),
+        iRefNo:         iRefNo.slice(0, 50),
+        trnDate,
+        branchCode:     brn.slice(0, 10),
+        amount,
+        currencyCode:   currency.slice(0, 5),
+        utilRefNo:      (utilRefNo || "").slice(0, 100),
+        utility:        (utility   || "").slice(0, 100),
+        custIden:       batchId.slice(0, 50),        // CBS ref = CustIden
+        particulars:    (particulars || "").slice(0, 500),
+        status:         1,
+        channel:        channel.slice(0, 10),
+        subChannel:     channel.slice(0, 10),
+        uniqueId,
+        processedTime:  trnDate,
+        entryTime:      now,
+        comAmount,
+        disasterRiskAmt
+    };
+
+    // DR row — debit the customer account
+    await prisma.transactions.create({
+        data: { ...base, acNo: drAcNo.slice(0, 20), crDr: "DR", uniqueId: `${uniqueId}D` }
+    }).catch(e => console.error("Transactions DR write failed:", e.message));
+
+    // CR row — credit the settlement account
+    await prisma.transactions.create({
+        data: { ...base, acNo: crAcNo.slice(0, 20), crDr: "CR", uniqueId: `${uniqueId}C`, comAmount: null, disasterRiskAmt: null }
+    }).catch(e => console.error("Transactions CR write failed:", e.message));
+};
+
 export {
     CBS_PRD,
+    CBS_MODULE_TYPE,
     CBS_OFFSET_ACCOUNTS,
     getOffsetAccount,
     CBS_BRANCH,
@@ -190,6 +244,7 @@ export {
     cbsCreateTransaction,
     cbsReverseTransaction,
     attemptAutoReversal,
+    insertTransactionJournal,
     extractXmlTag,
     normalizeAmount
 };
