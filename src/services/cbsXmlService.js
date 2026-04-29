@@ -4,6 +4,10 @@ const CBS_SOURCE        = (process.env.cbs_source        || "ADC").trim();
 const CBS_BRANCH        = (process.env.cbs_branch        || "001").trim();
 const CBS_OFFSET_BRANCH = (process.env.cbs_offset_branch || "046").trim();
 
+// Reversal uses a different source/user in CBS (PTP source for reversals)
+const CBS_REV_SOURCE = (process.env.cbs_rev_source || process.env.cbs_source || "ADC").trim();
+const CBS_REV_USER   = (process.env.cbs_rev_user   || process.env.cbs_user   || "ADCUSER").trim();
+
 // ─── Per-channel settlement (credit) accounts ─────────────────────────────────
 // Each channel debits the customer and credits its own settlement GL/account.
 // Set the correct account numbers in .env — these are just safe fallbacks.
@@ -110,18 +114,24 @@ const cbsCreateTransaction = ({ prd, drAcNo, crAcNo, amount, drBranch, crBranch,
 /**
  * Build a CBS REVERSETRANSACTION_FSFS_REQ SOAP envelope.
  * @param {string} fccRef - The FCCREF returned by CBS on the original transaction
+ *                          Branch is auto-derived from first 3 chars of FCCREF
+ *                          (e.g. "001ATAD22346A046" → branch "001")
  */
-const cbsReverseTransaction = (fccRef) =>
-    `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.com/service/FCUBSRTService">
+const cbsReverseTransaction = (fccRef) => {
+    // Branch = first 3 chars of FCCREF (same branch that created the transaction)
+    const branch = fccRef ? String(fccRef).slice(0, 3) : CBS_BRANCH;
+    const correlId = `CORR${Date.now()}`;
+
+    return `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.com/service/FCUBSRTService">
    <soapenv:Header/>
    <soapenv:Body>
       <fcub:REVERSETRANSACTION_FSFS_REQ>
          <fcub:FCUBS_HEADER>
-            <fcub:SOURCE>${CBS_SOURCE}</fcub:SOURCE>
+            <fcub:SOURCE>${CBS_REV_SOURCE}</fcub:SOURCE>
             <fcub:UBSCOMP>FCUBS</fcub:UBSCOMP>
-            <fcub:CORRELID>CORR${Date.now()}</fcub:CORRELID>
-            <fcub:USERID>${CBS_USER}</fcub:USERID>
-            <fcub:BRANCH>${CBS_BRANCH}</fcub:BRANCH>
+            <fcub:CORRELID>${correlId}</fcub:CORRELID>
+            <fcub:USERID>${CBS_REV_USER}</fcub:USERID>
+            <fcub:BRANCH>${branch}</fcub:BRANCH>
             <fcub:MODULEID>RT</fcub:MODULEID>
             <fcub:SERVICE>FCUBSRTService</fcub:SERVICE>
             <fcub:OPERATION>ReverseTransaction</fcub:OPERATION>
@@ -134,6 +144,7 @@ const cbsReverseTransaction = (fccRef) =>
       </fcub:REVERSETRANSACTION_FSFS_REQ>
    </soapenv:Body>
 </soapenv:Envelope>`;
+};
 
 // ─── Auto-reversal helper ─────────────────────────────────────────────────────
 /**
