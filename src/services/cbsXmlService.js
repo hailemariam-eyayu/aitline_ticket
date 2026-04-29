@@ -264,6 +264,37 @@ const insertTransactionJournal = async ({
     }).catch(e => console.error("Transactions CR write failed:", e.message));
 };
 
+// ─── CBS QueryCustAcc builder ─────────────────────────────────────────────────
+/**
+ * Build a CBS QUERYCUSTACC_IOFS_REQ SOAP envelope.
+ * Branch is auto-derived from first 3 chars of account number.
+ * @param {string} acNo - Account number to query
+ */
+const cbsQueryAccount = (acNo) => {
+    const branch = String(acNo).slice(0, 3);
+    return `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:fcub="http://fcubs.ofss.com/service/FCUBSAccService">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <fcub:QUERYCUSTACC_IOFS_REQ>
+         <fcub:FCUBS_HEADER>
+            <fcub:SOURCE>${CBS_SOURCE}</fcub:SOURCE>
+            <fcub:UBSCOMP>FCUBS</fcub:UBSCOMP>
+            <fcub:USERID>${CBS_USER}</fcub:USERID>
+            <fcub:BRANCH>${branch}</fcub:BRANCH>
+            <fcub:SERVICE>FCUBSAccService</fcub:SERVICE>
+            <fcub:OPERATION>QueryCustAcc</fcub:OPERATION>
+         </fcub:FCUBS_HEADER>
+         <fcub:FCUBS_BODY>
+            <fcub:Cust-Account-IO>
+               <fcub:BRN>${branch}</fcub:BRN>
+               <fcub:ACC>${acNo}</fcub:ACC>
+            </fcub:Cust-Account-IO>
+         </fcub:FCUBS_BODY>
+      </fcub:QUERYCUSTACC_IOFS_REQ>
+   </soapenv:Body>
+</soapenv:Envelope>`;
+};
+
 export {
     CBS_PRD,
     CBS_MODULE_TYPE,
@@ -274,6 +305,7 @@ export {
     CBS_OFFSET_BRANCH,
     cbsCreateTransaction,
     cbsReverseTransaction,
+    cbsQueryAccount,
     attemptAutoReversal,
     insertTransactionJournal,
     extractXmlTag,

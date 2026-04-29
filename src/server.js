@@ -3,6 +3,7 @@ import cors from 'cors';
 import flygateRoutes from "./routes/flygateRoutes.js";
 import cbsTransferRoutes from "./routes/cbsTransferRoutes.js";
 import rideRoutes from "./routes/rideRoutes.js";
+import a2aRoutes from "./routes/a2aRoutes.js";
 import { connectToDatabase, disconnectFromDatabase } from './config/db.js';
 import { config } from 'dotenv';
 config();
@@ -20,6 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/airline", flygateRoutes);
 app.use("/cbs", cbsTransferRoutes);
 app.use("/ride", rideRoutes);
+app.use("/a2a", a2aRoutes);
 
 // //Handle unhandled promise rejection eg, DB connection errors
 // process.on("unhandledRejection", (err) => {

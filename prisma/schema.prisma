@@ -233,6 +233,28 @@ model RideTransaction {
   @@map("RideTransaction")
 }
 
+// ─── Account-to-Account transfer ─────────────────────────────────────────────
+
+/// Audit log for A2A (account to account) transfers
+model A2ATransfer {
+  id              Int      @id @default(autoincrement())
+  drAcNo          String   @map("DrAcNo") @db.VarChar(20)
+  drAcName        String?  @map("DrAcName") @db.VarChar(200)
+  crAcNo          String   @map("CrAcNo") @db.VarChar(20)
+  crAcName        String?  @map("CrAcName") @db.VarChar(200)
+  amount          Decimal  @map("Amount") @db.Money
+  currency        String   @default("ETB") @map("Currency") @db.VarChar(5)
+  narrative       String?  @map("Narrative") @db.VarChar(500)
+  cbsRefNo        String?  @map("CBSRefNo") @db.VarChar(50)
+  status          Int      @default(0) @map("Status") @db.SmallInt   // 1=success, 0=failed
+  errorDesc       String?  @map("ErrorDesc") @db.VarChar(500)
+  autoReversed    Int?     @default(0) @map("AutoReversed") @db.SmallInt
+  autoReversalRef String?  @map("AutoReversalRef") @db.VarChar(50)
+  entryTime       DateTime @default(now()) @map("EntryTime") @db.Timestamp
+
+  @@map("A2ATransfer")
+}
+
 model RefundDetails {
   auto        Int      @id @default(autoincrement()) @map("Auto")
   receiveDate DateTime @default(now()) @map("ReceiveDate") @db.Timestamp

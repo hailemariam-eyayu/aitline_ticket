@@ -1,0 +1,22 @@
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+   xmlns:fcub="http://fcubs.ofss.com/service/FCUBSAccService">
+   <soapenv:Header />
+   <soapenv:Body>
+      <fcub:QUERYCUSTACC_IOFS_REQ>
+         <fcub:FCUBS_HEADER>
+            <fcub:SOURCE>ADC</fcub:SOURCE>
+            <fcub:UBSCOMP>FCUBS</fcub:UBSCOMP>
+            <fcub:USERID>ADCUSER</fcub:USERID>
+            <fcub:BRANCH>[BRANCH]</fcub:BRANCH>
+            <fcub:SERVICE>FCUBSAccService</fcub:SERVICE>
+            <fcub:OPERATION>QueryCustAcc</fcub:OPERATION>
+         </fcub:FCUBS_HEADER>
+         <fcub:FCUBS_BODY>
+            <fcub:Cust-Account-IO>
+               <fcub:BRN>[BRNACH]</fcub:BRN>
+               <fcub:ACC>[ACCOUNT-NUMBER]</fcub:ACC>
+            </fcub:Cust-Account-IO>
+         </fcub:FCUBS_BODY>
+      </fcub:QUERYCUSTACC_IOFS_REQ>
+   </soapenv:Body>
+</soapenv:Envelope>
