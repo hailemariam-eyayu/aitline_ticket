@@ -2,7 +2,7 @@ import axios from "axios";
 import https from "https";
 import { config } from "dotenv";
 import { prisma } from "../config/db.js";
-import { cbsCreateTransaction, CBS_PRD, getOffsetAccount, extractXmlTag } from "../services/cbsXmlService.js";
+import { cbsCreateTransaction, CBS_PRD, getOffsetAccount, attemptAutoReversal, extractXmlTag } from "../services/cbsXmlService.js";
 config();
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
@@ -243,9 +243,32 @@ const payRide = async (req, res) => {
         });
 
         if (!confirmOk) {
+            // ── Auto-reverse CBS since Ride confirm failed ────────────────────
+            const reversal = await attemptAutoReversal(cbsRefNo, CBS_RT_URL, httpsAgent, axios.post.bind(axios));
+            await updateAudit({
+                paymentStatus:     0,
+                autoReversed:      reversal.success ? 1 : 0,
+                autoReversalRef:   reversal.reversalRef,
+                autoReversalError: reversal.error,
+                errorDesc:         String(confirmRes.data?.message || "Ride confirm failed").slice(0, 500)
+            });
+            // Also mark the Transactions row as auto-reversed
+            if (cbsRefNo) {
+                await prisma.transactions.updateMany({
+                    where: { cbsRefNo: String(cbsRefNo) },
+                    data: {
+                        status:            0,
+                        autoReversed:      reversal.success ? 1 : 0,
+                        autoReversalRef:   reversal.reversalRef,
+                        autoReversalError: reversal.error
+                    }
+                }).catch(e => console.error("Transactions auto-reversal update failed:", e.message));
+            }
             return res.status(400).json({
-                status:  "Error",
-                message: confirmRes.data?.message || "Ride payment confirmation failed",
+                status:        "Error",
+                message:       confirmRes.data?.message || "Ride payment confirmation failed",
+                autoReversed:  reversal.success,
+                autoReversalRef: reversal.reversalRef,
                 auditId
             });
         }

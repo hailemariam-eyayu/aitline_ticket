@@ -8,6 +8,7 @@ import {
     CBS_PRD,
     cbsCreateTransaction,
     cbsReverseTransaction,
+    attemptAutoReversal,
     extractXmlTag
 } from "../services/cbsXmlService.js";
 config();
@@ -383,6 +384,34 @@ const confirmOrder = async (req, res) => {
             const err = new Error(flyGateResponse.data?.message || "Flygate confirm failed");
             err.httpStatus = flyGateResponse.status;
             err.upstreamData = flyGateResponse.data;
+
+            // ── Auto-reverse CBS since FlyGate confirm failed ────────────────
+            const reversal = await attemptAutoReversal(finalReferenceNumber, CBS_RT_URL, httpsAgent, axios.post.bind(axios));
+            // Write a failed FlygateTransactions row so we have a record
+            await prisma.flygateTransactions.create({
+                data: {
+                    orderId:           String(orderid).slice(0, 20),
+                    trnDate:           cbsTrnDate,
+                    drAcNo:            String(beneficiaryAcno).slice(0, 50),
+                    crAcNo:            getOffsetAccount("AIRLINE").slice(0, 50),
+                    customerName:      String(customerName).slice(0, 500),
+                    pnr:               orderPnr ? String(orderPnr).slice(0, 25) : null,
+                    amount:            Number(amount),
+                    currency:          String(currency).slice(0, 5),
+                    remarks:           `FlyGate confirm failed — auto-reversed`,
+                    status:            0,
+                    traceNumber:       String(finalTraceNumber).slice(0, 150),
+                    bankRefNo:         String(finalReferenceNumber).slice(0, 500),
+                    processedDate:     new Date(),
+                    channel:           "API",
+                    isRefund:          0,
+                    autoReversed:      reversal.success ? 1 : 0,
+                    autoReversalRef:   reversal.reversalRef,
+                    autoReversalError: reversal.error,
+                    entryDate:         new Date()
+                }
+            }).catch(e => console.error("FlygateTransactions (failed+reversed) write failed:", e.message));
+
             throw err;
         }
 

@@ -101,6 +101,11 @@ model FlygateTransactions {
   orgPnr              String? @map("OrgPNR") @db.VarChar(25)
   orgBankRefNo        String? @map("OrgBankRefNo") @db.VarChar(500)
 
+  // Auto-reversal (triggered when FlyGate confirm fails after CBS success)
+  autoReversed      Int?     @default(0) @map("AutoReversed") @db.SmallInt  // 1=reversed, 0=not
+  autoReversalRef   String?  @map("AutoReversalRef") @db.VarChar(50)        // CBS reversal FCCREF
+  autoReversalError String?  @map("AutoReversalError") @db.VarChar(500)     // if reversal itself failed
+
   entryDate DateTime @default(now()) @map("EntryDate") @db.Timestamp
 
   @@map("FlygateTransactions")
@@ -148,6 +153,11 @@ model Transactions {
   // CBS fault
   faultCode   Decimal? @map("FAULTCODE") @db.Decimal
   faultString String?  @map("FAULTSTRING") @db.Text
+
+  // Auto-reversal (triggered when confirm fails after CBS success)
+  autoReversed      Int?    @default(0) @map("AutoReversed") @db.SmallInt
+  autoReversalRef   String? @map("AutoReversalRef") @db.VarChar(50)
+  autoReversalError String? @map("AutoReversalError") @db.VarChar(500)
 
   entryTime DateTime @default(now()) @map("EntryTime") @db.Timestamp
 
@@ -205,10 +215,15 @@ model RideTransaction {
   crAcNo            String?  @map("CrAcNo") @db.VarChar(50)
   
   // Status tracking
-  queryStatus       Int      @default(0) @map("QueryStatus") @db.SmallInt      // 1=success, 0=failed
-  paymentStatus     Int      @default(0) @map("PaymentStatus") @db.SmallInt    // 1=success, 0=failed
-  cbsStatus         Int      @default(0) @map("CBSStatus") @db.SmallInt        // 1=success, 0=failed
-  
+  queryStatus       Int      @default(0) @map("QueryStatus") @db.SmallInt
+  paymentStatus     Int      @default(0) @map("PaymentStatus") @db.SmallInt
+  cbsStatus         Int      @default(0) @map("CBSStatus") @db.SmallInt
+
+  // Auto-reversal (triggered when Ride confirm fails after CBS success)
+  autoReversed      Int?    @default(0) @map("AutoReversed") @db.SmallInt
+  autoReversalRef   String? @map("AutoReversalRef") @db.VarChar(50)
+  autoReversalError String? @map("AutoReversalError") @db.VarChar(500)
+
   errorDesc         String?  @map("ErrorDesc") @db.VarChar(500)
   queryResponse     String?  @map("QueryResponse") @db.Text     // raw JSON from Ride query
   confirmResponse   String?  @map("ConfirmResponse") @db.Text   // raw JSON from Ride confirm

@@ -135,6 +135,41 @@ const cbsReverseTransaction = (fccRef) =>
    </soapenv:Body>
 </soapenv:Envelope>`;
 
+// ─── Auto-reversal helper ─────────────────────────────────────────────────────
+/**
+ * Attempt to reverse a CBS transaction silently.
+ * Returns { success, reversalRef, error }.
+ * Never throws — caller decides what to do with the result.
+ *
+ * @param {string} fccRef       - CBS FCCREF to reverse
+ * @param {string} cbsRtUrl     - CBS RT endpoint URL
+ * @param {object} httpsAgent   - https.Agent (TLS config)
+ * @param {Function} axiosPost  - axios.post (injected to avoid circular deps)
+ */
+const attemptAutoReversal = async (fccRef, cbsRtUrl, httpsAgent, axiosPost) => {
+    try {
+        const reversalXml = cbsReverseTransaction(fccRef);
+        console.log(`\n[AUTO-REVERSAL] Reversing CBS ref: ${fccRef}`);
+
+        const res = await axiosPost(cbsRtUrl, reversalXml, {
+            headers: { "Content-Type": "text/xml;charset=utf-8", SOAPAction: "REVERSETRANSACTION_FSFS_REQ" },
+            httpsAgent,
+            validateStatus: (s) => s >= 200 && s < 600
+        });
+
+        const xml        = res.data || "";
+        const isSuccess  = xml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
+        const reversalRef = extractXmlTag(xml, "FCCREF") || fccRef;
+        const errDesc    = extractXmlTag(xml, "EDESC") || extractXmlTag(xml, "faultstring");
+
+        console.log(`[AUTO-REVERSAL] ${isSuccess ? "SUCCESS" : "FAILED"} — ref: ${reversalRef}${errDesc ? " | " + errDesc : ""}`);
+        return { success: isSuccess, reversalRef: isSuccess ? reversalRef : null, error: isSuccess ? null : (errDesc || "Reversal failed") };
+    } catch (e) {
+        console.error("[AUTO-REVERSAL] Exception:", e.message);
+        return { success: false, reversalRef: null, error: e.message };
+    }
+};
+
 export {
     CBS_PRD,
     CBS_OFFSET_ACCOUNTS,
@@ -143,6 +178,7 @@ export {
     CBS_OFFSET_BRANCH,
     cbsCreateTransaction,
     cbsReverseTransaction,
+    attemptAutoReversal,
     extractXmlTag,
     normalizeAmount
 };
