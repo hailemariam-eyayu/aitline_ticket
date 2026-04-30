@@ -217,15 +217,17 @@ const insertTransactionJournal = async ({
     trnDate, utility, utilRefNo, particulars,
     currency = "ETB", comAmount = 0, disasterRiskAmt = 0
 }) => {
-    // moduleType = what kind of transaction (AIRLINE=153, TELEBIRR=153, etc.)
     const moduleType  = CBS_MODULE_TYPE[String(cbsChannel).toUpperCase()] ?? 153;
-    // channel/subChannel = which frontend service (IB, MB, USSD, BO) — from frontend only
     const channel     = (frontendChannel || "IB").slice(0, 10);
     const uniqueId    = String(Date.now());
     const batchId     = cbsRefNo || "";
-    const iRefNo      = utilRefNo || cbsRefNo || "";
     const drBranch    = getBranch(cbsChannel, drAcNo, "DR");
     const now         = new Date();
+
+    // iRefNo = {channel}TRN{YYYYMMDDHHmmss}  e.g. IBTRN20260430062148
+    const pad    = (n) => String(n).padStart(2, "0");
+    const dtStr  = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const iRefNo = `${channel}TRN${dtStr}`;
 
     const base = {
         batchId:        batchId.slice(0, 50),
@@ -238,9 +240,9 @@ const insertTransactionJournal = async ({
         utility:        (utility   || "").slice(0, 100),
         custIden:       batchId.slice(0, 50),
         particulars:    (particulars || "").slice(0, 500),
-        moduleType,                // AIRLINE=153, TELEBIRR=153, BILL=16 etc.
+        moduleType,
         status:         1,
-        channel,                   // IB | MB | USSD | BO — stored in DB only
+        channel,
         subChannel:     channel,
         uniqueId,
         processedTime:  trnDate,

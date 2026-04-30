@@ -136,6 +136,7 @@ model Transactions {
 
   // References
   cbsRefNo    String? @map("CBSRefNo") @db.VarChar(50)
+  iRefNo      String? @map("IRefNo") @db.VarChar(50)    // {channel}TRN{YYYYMMDDHHmmss} e.g. IBTRN20260430062148
   traceNumber String? @map("TraceNumber") @db.VarChar(150)
   batchId     String? @map("BatchId") @db.VarChar(50)
   scrollId    String? @map("ScrollId") @db.VarChar(50)
