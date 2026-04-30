@@ -238,7 +238,7 @@ const insertTransactionJournal = async ({
         currencyCode:   currency.slice(0, 5),
         utilRefNo:      (utilRefNo || "").slice(0, 100),
         utility:        (utility   || "").slice(0, 100),
-        custIden:       batchId.slice(0, 50),
+        custIden:       batchId.slice(0, 50),   // CBS FCCREF = CustIden
         particulars:    (particulars || "").slice(0, 500),
         moduleType,
         status:         1,
@@ -253,7 +253,7 @@ const insertTransactionJournal = async ({
 
     // DR row — debit the customer account
     await prisma.transactions.create({
-        data: { ...base, acNo: drAcNo.slice(0, 20), crDr: "DR", uniqueId: `${uniqueId}D` }
+        data: { ...base, acNo: drAcNo.slice(0, 20), uniqueId: `${uniqueId}D` }
     }).catch(e => console.error("Transactions DR write failed:", e.message));
 
     // CR row — credit the settlement account (no charges on CR side)
@@ -261,7 +261,6 @@ const insertTransactionJournal = async ({
         data: {
             ...base,
             acNo:            crAcNo.slice(0, 20),
-            crDr:            "CR",
             uniqueId:        `${uniqueId}C`,
             comAmount:       null,
             disasterRiskAmt: null

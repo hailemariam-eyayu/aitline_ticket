@@ -247,6 +247,7 @@ const a2aTransfer = async (req, res) => {
             cbsRefNo,
             trnDate:         cbsTrnDate,
             utility:         `${drAcNo}→${crAcNo}`,
+            // A2A is internal — no third party, use CBS ref as utilRefNo
             utilRefNo:       cbsRefNo || "",
             particulars:     txnNarrative,
             currency:        String(currency).toUpperCase(),

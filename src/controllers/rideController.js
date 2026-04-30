@@ -307,6 +307,7 @@ const payRide = async (req, res) => {
             cbsRefNo:        cbsRefNo,
             trnDate:         cbsTrnDate,
             utility:         String(phone),
+            // billRefNo = third-party reference sent to Ride
             utilRefNo:       billRefNo,
             particulars:     `Ride payment ${phone}`,
             currency:        "ETB",

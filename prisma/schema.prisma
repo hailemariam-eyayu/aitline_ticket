@@ -116,14 +116,11 @@ model FlygateTransactions {
 /// CBS-side transaction journal entry written on successful payment
 model Transactions {
   auto          Int      @id @default(autoincrement()) @map("Auto")
-  orderId       String?  @map("OrderId") @db.VarChar(20)
-  pnr           String?  @map("PNR") @db.VarChar(25)
   trnDate       DateTime @default(now()) @map("TrnDate") @db.Timestamp
   processedTime DateTime @default(now()) @map("ProcessedTime") @db.Timestamp
 
-  // Accounts
-  drAcNo   String? @map("DrAcNo") @db.VarChar(50)
-  crAcNo   String? @map("CrAcNo") @db.VarChar(50)
+  // Account number (AcNo = drAcNo for DR row, crAcNo for CR row)
+  acNo       String? @map("AcNo") @db.VarChar(20)
   branchCode String? @map("BranchCode") @db.VarChar(10)
 
   // Amount
@@ -132,31 +129,35 @@ model Transactions {
 
   // Customer
   customerName String? @map("CustomerName") @db.VarChar(500)
-  custIden     String? @map("CustIden") @db.VarChar(50)
+  custIden     String? @map("CustIden") @db.VarChar(50)   // CBS reference number (FCCREF)
 
   // References
   cbsRefNo    String? @map("CBSRefNo") @db.VarChar(50)
-  iRefNo      String? @map("IRefNo") @db.VarChar(50)    // {channel}TRN{YYYYMMDDHHmmss} e.g. IBTRN20260430062148
+  iRefNo      String? @map("IRefNo") @db.VarChar(50)      // {channel}TRN{YYYYMMDDHHmmss}
   traceNumber String? @map("TraceNumber") @db.VarChar(150)
-  batchId     String? @map("BatchId") @db.VarChar(50)
+  batchId     String? @map("BatchId") @db.VarChar(50)     // CBS FCCREF
   scrollId    String? @map("ScrollId") @db.VarChar(50)
+  // UtilRefNo: third-party ref for external channels (FlyGate traceNo, Ride billRefNo, Telebirr orderId)
+  //            CBS ref for internal transfers (A2A)
   utilRefNo   String? @map("UtilRefNo") @db.VarChar(100)
+  utility     String? @map("Utility") @db.VarChar(100)    // PNR (airline) / phone (ride) / acNo→acNo (A2A)
   uniqueId    String? @unique @map("UniqueId") @db.VarChar(50)
 
   // Meta
-  crDr        String?  @map("CrDr") @db.VarChar(6)
-  moduleType  Int?     @map("ModuleType") @db.SmallInt   // 153=Telebirr/Airline, 16=Bill etc.
-  remarks     String?  @map("Remarks") @db.VarChar(500)
+  moduleType  Int?     @map("ModuleType") @db.SmallInt    // 153=Airline/Telebirr, 16=Bill
   particulars String?  @map("Particulars") @db.VarChar(500)
+  remarks     String?  @map("Remarks") @db.VarChar(500)
   status      Int?     @map("Status") @db.SmallInt
-  channel     String?  @map("Channel") @db.VarChar(10)
+  channel     String?  @map("Channel") @db.VarChar(10)    // IB | MB | USSD | BO
   subChannel  String?  @map("SubChannel") @db.VarChar(10)
+  comAmount       Decimal? @map("ComAmount") @db.Money
+  disasterRiskAmt Decimal? @map("DisasterRiskAmt") @db.Money
 
   // CBS fault
   faultCode   Decimal? @map("FAULTCODE") @db.Decimal
   faultString String?  @map("FAULTSTRING") @db.Text
 
-  // Auto-reversal (triggered when confirm fails after CBS success)
+  // Auto-reversal
   autoReversed      Int?    @default(0) @map("AutoReversed") @db.SmallInt
   autoReversalRef   String? @map("AutoReversalRef") @db.VarChar(50)
   autoReversalError String? @map("AutoReversalError") @db.VarChar(500)

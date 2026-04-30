@@ -466,6 +466,7 @@ const confirmOrder = async (req, res) => {
             cbsRefNo:        finalReferenceNumber,
             trnDate:         cbsTrnDate,
             utility:         orderPnr || orderid,
+            // FlyGate traceNumber = third-party reference for airline
             utilRefNo:       flyGateTraceNumber,
             particulars:     `Airline ticket - ${orderid}`,
             currency,
