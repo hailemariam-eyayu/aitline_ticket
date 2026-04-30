@@ -23,40 +23,49 @@ const fetchAccountDetails = async (acNo) => {
     const xml = cbsQueryAccount(String(acNo));
     logXml(`CBS QUERY ACCOUNT [${acNo}]`, xml);
 
-    const res = await axios.post(CBS_ACC_URL, xml, {
-        headers: { "Content-Type": "text/xml;charset=utf-8", SOAPAction: "" },
-        httpsAgent,
-        validateStatus: (s) => s >= 200 && s < 600
-    });
+    let res;
+    try {
+        res = await axios.post(CBS_ACC_URL, xml, {
+            headers: { "Content-Type": "text/xml;charset=utf-8", SOAPAction: "" },
+            httpsAgent,
+            validateStatus: (s) => s >= 200 && s < 600,
+            timeout: 15000
+        });
+    } catch (netErr) {
+        throw new Error(`CBS AccService unreachable (${CBS_ACC_URL}): ${netErr.message}`);
+    }
 
     const responseXml = res.data || "";
     logXml(`CBS QUERY ACCOUNT RESPONSE [${acNo}]`, responseXml);
 
     // Log to CbsReqRes
-    await prisma.cbsReqRes.create({
-        data: { orderId: String(acNo).slice(0, 20), type: 1, data: xml }
-    }).catch(() => {});
-    await prisma.cbsReqRes.create({
-        data: { orderId: String(acNo).slice(0, 20), type: 2, data: responseXml }
-    }).catch(() => {});
+    await prisma.cbsReqRes.create({ data: { orderId: String(acNo).slice(0, 20), type: 1, data: xml } }).catch(() => {});
+    await prisma.cbsReqRes.create({ data: { orderId: String(acNo).slice(0, 20), type: 2, data: String(responseXml).slice(0, 100000) } }).catch(() => {});
+
+    // If CBS returned non-XML (HTML error page etc.), surface it clearly
+    if (typeof responseXml !== "string" || !responseXml.includes("<")) {
+        throw new Error(`CBS returned unexpected response for account ${acNo}: ${String(responseXml).slice(0, 200)}`);
+    }
 
     const fault = extractXmlTag(responseXml, "faultstring");
-    if (fault) throw new Error(`CBS Fault: ${fault}`);
+    if (fault) throw new Error(`CBS Fault for ${acNo}: ${fault}`);
 
     const isSuccess = responseXml.includes("<MSGSTAT>SUCCESS</MSGSTAT>");
     if (!isSuccess) {
-        const errDesc = extractXmlTag(responseXml, "EDESC") || "Account not found";
-        throw new Error(errDesc);
+        const errDesc = extractXmlTag(responseXml, "EDESC") || extractXmlTag(responseXml, "WDESC") || "Account not found";
+        throw new Error(`${errDesc} (account: ${acNo})`);
     }
 
-    const custName  = extractXmlTag(responseXml, "CUSTNAME");
-    const accStat   = extractXmlTag(responseXml, "ACCSTAT");   // NORM, DORM, etc.
-    const frozen    = extractXmlTag(responseXml, "FROZEN");    // Y/N
-    const noCredit  = extractXmlTag(responseXml, "ACSTATNOCR"); // Y = no credit allowed
-    const noDebit   = extractXmlTag(responseXml, "ACSTATNODR"); // Y = no debit allowed
-    const ccy       = extractXmlTag(responseXml, "CCY");
-
-    return { acNo, custName, accStat, frozen, noCredit, noDebit, ccy, raw: responseXml };
+    return {
+        acNo,
+        custName:  extractXmlTag(responseXml, "CUSTNAME"),
+        accStat:   extractXmlTag(responseXml, "ACCSTAT"),
+        frozen:    extractXmlTag(responseXml, "FROZEN"),
+        noCredit:  extractXmlTag(responseXml, "ACSTATNOCR"),
+        noDebit:   extractXmlTag(responseXml, "ACSTATNODR"),
+        ccy:       extractXmlTag(responseXml, "CCY"),
+        raw:       responseXml
+    };
 };
 
 // ─── POST /a2a/validate ───────────────────────────────────────────────────────

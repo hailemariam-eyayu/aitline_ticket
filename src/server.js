@@ -51,3 +51,9 @@ const port = process.env.PORT || 4001;
 const server = app.listen(port, () => {
   console.log(`Server is running at http://localhost:${port}`);
 });
+
+// ── Global error handler — always return JSON, never HTML ─────────────────────
+app.use((err, req, res, next) => {
+    console.error("Unhandled error:", err);
+    res.status(500).json({ status: "Error", message: err.message || "Internal Server Error" });
+});
