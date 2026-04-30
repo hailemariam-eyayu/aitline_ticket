@@ -217,11 +217,13 @@ const insertTransactionJournal = async ({
     trnDate, utility, utilRefNo, particulars,
     currency = "ETB", comAmount = 0, disasterRiskAmt = 0
 }) => {
+    // moduleType = what kind of transaction (AIRLINE=153, TELEBIRR=153, etc.)
     const moduleType  = CBS_MODULE_TYPE[String(cbsChannel).toUpperCase()] ?? 153;
+    // channel/subChannel = which frontend service (IB, MB, USSD, BO) — from frontend only
+    const channel     = (frontendChannel || "IB").slice(0, 10);
     const uniqueId    = String(Date.now());
     const batchId     = cbsRefNo || "";
     const iRefNo      = utilRefNo || cbsRefNo || "";
-    // Branch derived per account (or fixed for Telebirr/MPESA/IPS)
     const drBranch    = getBranch(cbsChannel, drAcNo, "DR");
     const now         = new Date();
 
@@ -236,9 +238,10 @@ const insertTransactionJournal = async ({
         utility:        (utility   || "").slice(0, 100),
         custIden:       batchId.slice(0, 50),
         particulars:    (particulars || "").slice(0, 500),
+        moduleType,                // AIRLINE=153, TELEBIRR=153, BILL=16 etc.
         status:         1,
-        channel:        (frontendChannel || cbsChannel).slice(0, 10),  // stored in DB only
-        subChannel:     (frontendChannel || cbsChannel).slice(0, 10),
+        channel,                   // IB | MB | USSD | BO — stored in DB only
+        subChannel:     channel,
         uniqueId,
         processedTime:  trnDate,
         entryTime:      now,
@@ -255,10 +258,10 @@ const insertTransactionJournal = async ({
     await prisma.transactions.create({
         data: {
             ...base,
-            acNo:           crAcNo.slice(0, 20),
-            crDr:           "CR",
-            uniqueId:       `${uniqueId}C`,
-            comAmount:      null,
+            acNo:            crAcNo.slice(0, 20),
+            crDr:            "CR",
+            uniqueId:        `${uniqueId}C`,
+            comAmount:       null,
             disasterRiskAmt: null
         }
     }).catch(e => console.error("Transactions CR write failed:", e.message));

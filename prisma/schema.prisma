@@ -144,6 +144,7 @@ model Transactions {
 
   // Meta
   crDr        String?  @map("CrDr") @db.VarChar(6)
+  moduleType  Int?     @map("ModuleType") @db.SmallInt   // 153=Telebirr/Airline, 16=Bill etc.
   remarks     String?  @map("Remarks") @db.VarChar(500)
   particulars String?  @map("Particulars") @db.VarChar(500)
   status      Int?     @map("Status") @db.SmallInt
