@@ -127,8 +127,7 @@ model Transactions {
   amount       Decimal? @map("Amount") @db.Money
   currencyCode String?  @map("CurrencyCode") @db.VarChar(5)
 
-  // Customer
-  customerName String? @map("CustomerName") @db.VarChar(500)
+  // Customer (credited party name)
   custIden     String? @map("CustIden") @db.VarChar(50)   // CBS reference number (FCCREF)
 
   // References
@@ -144,12 +143,12 @@ model Transactions {
   uniqueId    String? @unique @map("UniqueId") @db.VarChar(50)
 
   // Meta
-  moduleType  Int?     @map("ModuleType") @db.SmallInt    // 153=Airline/Telebirr, 16=Bill
-  particulars String?  @map("Particulars") @db.VarChar(500)
-  remarks     String?  @map("Remarks") @db.VarChar(500)
-  status      Int?     @map("Status") @db.SmallInt
-  channel     String?  @map("Channel") @db.VarChar(10)    // IB | MB | USSD | BO
-  subChannel  String?  @map("SubChannel") @db.VarChar(10)
+  moduleType   Int?     @map("ModuleType") @db.SmallInt
+  particulars  String?  @map("Particulars") @db.VarChar(500)
+  remarks      String?  @map("Remarks") @db.VarChar(500)
+  status       Int?     @map("Status") @db.SmallInt
+  channel      String?  @map("Channel") @db.VarChar(10)       // IB | MB | USSD | BO
+  customerName String?  @map("CustomerName") @db.VarChar(500) // credited party name
   comAmount       Decimal? @map("ComAmount") @db.Money
   disasterRiskAmt Decimal? @map("DisasterRiskAmt") @db.Money
 

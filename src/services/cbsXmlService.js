@@ -197,16 +197,17 @@ const attemptAutoReversal = async (fccRef, cbsRtUrl, httpsAgent, axiosPost) => {
  *
  * @param {object} p
  * @param {object} p.prisma           - Prisma client
- * @param {string} p.cbsChannel       - CBS channel name for branch derivation (AIRLINE, RIDE, TELEBIRR…)
- * @param {string} p.frontendChannel  - Frontend channel stored in DB only (MB, USSD, API, WEB…)
+ * @param {string} p.cbsChannel       - CBS channel name for branch/PRD derivation
+ * @param {string} p.frontendChannel  - Frontend channel (IB, MB, USSD, BO) — stored in DB only
  * @param {string} p.drAcNo           - Debit account number
  * @param {string} p.crAcNo           - Credit account number
  * @param {number} p.amount           - Transaction amount
- * @param {string} p.cbsRefNo         - CBS FCCREF (BatchId + CustIden)
+ * @param {string} p.cbsRefNo         - CBS FCCREF
  * @param {Date}   p.trnDate          - Transaction date from CBS BOOKDATE
- * @param {string} p.utility          - PNR (airline) or phone (ride)
- * @param {string} p.utilRefNo        - FlyGate traceNumber or Ride billRefNo
+ * @param {string} p.utility          - PNR (airline) / phone (ride) / acNo→acNo (A2A)
+ * @param {string} p.utilRefNo        - Third-party ref (FlyGate trace, Ride billRef) or CBS ref for A2A
  * @param {string} p.particulars      - Free text description
+ * @param {string} [p.customerName]   - Credited party name (account holder of crAcNo)
  * @param {string} [p.currency]       - Currency code (default ETB)
  * @param {number} [p.comAmount]      - Charge amount from CBS CHGAMT
  * @param {number} [p.disasterRiskAmt]- Disaster risk from CBS LCYCHG
@@ -215,7 +216,7 @@ const insertTransactionJournal = async ({
     prisma, cbsChannel, frontendChannel,
     drAcNo, crAcNo, amount, cbsRefNo,
     trnDate, utility, utilRefNo, particulars,
-    currency = "ETB", comAmount = 0, disasterRiskAmt = 0
+    customerName, currency = "ETB", comAmount = 0, disasterRiskAmt = 0
 }) => {
     const moduleType  = CBS_MODULE_TYPE[String(cbsChannel).toUpperCase()] ?? 153;
     const channel     = (frontendChannel || "IB").slice(0, 10);
@@ -240,10 +241,10 @@ const insertTransactionJournal = async ({
         utility:        (utility   || "").slice(0, 100),
         custIden:       batchId.slice(0, 50),   // CBS FCCREF = CustIden
         particulars:    (particulars || "").slice(0, 500),
+        customerName:   customerName ? String(customerName).slice(0, 500) : null,
         moduleType,
         status:         1,
         channel,
-        subChannel:     channel,
         uniqueId,
         processedTime:  trnDate,
         entryTime:      now,

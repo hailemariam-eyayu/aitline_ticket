@@ -247,9 +247,9 @@ const a2aTransfer = async (req, res) => {
             cbsRefNo,
             trnDate:         cbsTrnDate,
             utility:         `${drAcNo}→${crAcNo}`,
-            // A2A is internal — no third party, use CBS ref as utilRefNo
             utilRefNo:       cbsRefNo || "",
             particulars:     txnNarrative,
+            customerName:    crInfo.custName || null,
             currency:        String(currency).toUpperCase(),
             comAmount:       Number(extractXmlTag(cbsXml, "CHGAMT") || 0),
             disasterRiskAmt: Number(extractXmlTag(cbsXml, "LCYCHG") || 0)

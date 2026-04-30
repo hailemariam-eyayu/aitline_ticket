@@ -307,9 +307,10 @@ const payRide = async (req, res) => {
             cbsRefNo:        cbsRefNo,
             trnDate:         cbsTrnDate,
             utility:         String(phone),
-            // billRefNo = third-party reference sent to Ride
             utilRefNo:       billRefNo,
             particulars:     `Ride payment ${phone}`,
+            // fullName from Ride query response stored in audit row
+            customerName:    (await prisma.rideTransaction.findUnique({ where: { id: auditId } }).catch(() => null))?.fullName || null,
             currency:        "ETB",
             comAmount:       Number(extractXmlTag(cbsXml, "CHGAMT") || 0),
             disasterRiskAmt: Number(extractXmlTag(cbsXml, "LCYCHG") || 0)

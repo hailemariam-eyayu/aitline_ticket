@@ -466,9 +466,9 @@ const confirmOrder = async (req, res) => {
             cbsRefNo:        finalReferenceNumber,
             trnDate:         cbsTrnDate,
             utility:         orderPnr || orderid,
-            // FlyGate traceNumber = third-party reference for airline
             utilRefNo:       flyGateTraceNumber,
             particulars:     `Airline ticket - ${orderid}`,
+            customerName:    customerName || null,
             currency,
             comAmount:       Number(extractXmlTag(cbsResponseXml, "CHGAMT") || 0),
             disasterRiskAmt: Number(extractXmlTag(cbsResponseXml, "LCYCHG") || 0)
