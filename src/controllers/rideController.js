@@ -70,16 +70,36 @@ const queryRideAccount = async (req, res) => {
             });
         }
 
-        // Active — create the single audit row
-        const audit = await prisma.rideTransaction.create({
-            data: {
-                phone:         String(phone).slice(0, 20),
-                fullName:      rideRes.data.full_name ? String(rideRes.data.full_name).slice(0, 200) : null,
-                accountStatus: String(rideRes.data.status).slice(0, 20),
-                queryStatus:   1,
-                queryResponse: JSON.stringify(rideRes.data)
-            }
-        });
+        // Active — upsert: update existing unpaid row or create new one
+        // This prevents duplicate rows when user calls /query multiple times
+        const existingRow = await prisma.rideTransaction.findFirst({
+            where: { phone: String(phone).slice(0, 20), queryStatus: 1, paymentStatus: 0 },
+            orderBy: { id: "desc" }
+        }).catch(() => null);
+
+        let audit;
+        if (existingRow) {
+            // Update the existing pending row with fresh query data
+            audit = await prisma.rideTransaction.update({
+                where: { id: existingRow.id },
+                data: {
+                    fullName:      rideRes.data.full_name ? String(rideRes.data.full_name).slice(0, 200) : null,
+                    accountStatus: String(rideRes.data.status).slice(0, 20),
+                    queryResponse: JSON.stringify(rideRes.data)
+                }
+            });
+        } else {
+            // No pending row — create one
+            audit = await prisma.rideTransaction.create({
+                data: {
+                    phone:         String(phone).slice(0, 20),
+                    fullName:      rideRes.data.full_name ? String(rideRes.data.full_name).slice(0, 200) : null,
+                    accountStatus: String(rideRes.data.status).slice(0, 20),
+                    queryStatus:   1,
+                    queryResponse: JSON.stringify(rideRes.data)
+                }
+            });
+        }
 
         return res.status(200).json({
             status:  "Success",
