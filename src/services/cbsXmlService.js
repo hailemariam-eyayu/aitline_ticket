@@ -233,7 +233,8 @@ const insertTransactionJournal = async ({
     const base = {
         batchId:        batchId.slice(0, 50),
         iRefNo:         iRefNo.slice(0, 50),
-        trnDate,
+        trnDate,                    // CBS book date (from <BOOKDATE> in CBS response)
+        processedTime:  now,        // actual datetime the full flow completed
         branchCode:     drBranch.slice(0, 10),
         amount,
         currencyCode:   currency.slice(0, 5),
@@ -246,7 +247,6 @@ const insertTransactionJournal = async ({
         status:         1,
         channel,
         uniqueId,
-        processedTime:  trnDate,
         entryTime:      now,
         comAmount,
         disasterRiskAmt
