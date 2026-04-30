@@ -13,8 +13,9 @@ import {
 config();
 
 const httpsAgent  = new https.Agent({ rejectUnauthorized: false });
-const CBS_RT_URL  = (process.env.cbs_endpoint || process.env.cbs_url || "http://10.1.22.100:7003/FCUBSRTService/FCUBSRTService").trim();
-const CBS_ACC_URL = (process.env.cbs_acc_url  || "http://10.1.22.100:7003/FCUBSAccService/FCUBSAccService").trim();
+const CBS_RT_URL  = (process.env.cbs_endpoint || "http://10.1.22.100:7003/FCUBSRTService/FCUBSRTService").trim();
+// Account query endpoint — used to validate the credit account
+const CBS_ACC_URL = (process.env.cbsquerycustomeraccount || process.env.cbs_acc_url || "http://10.1.22.100:7003/FCUBSAccService/FCUBSAccService").trim();
 
 const logXml  = (label, xml)  => console.log(`\n===== ${label} =====\n${xml}\n===== END ${label} =====\n`);
 
@@ -70,7 +71,8 @@ const fetchAccountDetails = async (acNo) => {
 
 // ─── POST /a2a/validate ───────────────────────────────────────────────────────
 /**
- * Validate both debit and credit accounts before showing the transfer form.
+ * Validate the credit account before showing the transfer form.
+ * Debit account is the customer's own account — trusted, not queried.
  * Body: { drAcNo, crAcNo }
  */
 const validateAccounts = async (req, res) => {
@@ -83,20 +85,9 @@ const validateAccounts = async (req, res) => {
     }
 
     try {
-        const [dr, cr] = await Promise.all([
-            fetchAccountDetails(drAcNo),
-            fetchAccountDetails(crAcNo)
-        ]);
+        // Only validate the credit (destination) account
+        const cr = await fetchAccountDetails(crAcNo);
 
-        // Check debit account can be debited
-        if (dr.frozen === "Y") {
-            return res.status(422).json({ status: "Error", message: `Debit account ${drAcNo} is frozen` });
-        }
-        if (dr.noDebit === "Y") {
-            return res.status(422).json({ status: "Error", message: `Debit account ${drAcNo} does not allow debits` });
-        }
-
-        // Check credit account can be credited
         if (cr.frozen === "Y") {
             return res.status(422).json({ status: "Error", message: `Credit account ${crAcNo} is frozen` });
         }
@@ -106,7 +97,8 @@ const validateAccounts = async (req, res) => {
 
         return res.status(200).json({
             status: "Success",
-            dr: { acNo: dr.acNo, name: dr.custName, status: dr.accStat, currency: dr.ccy },
+            // Debit account info returned as-is (no CBS query)
+            dr: { acNo: drAcNo, name: null, status: "NORM", currency: "ETB" },
             cr: { acNo: cr.acNo, name: cr.custName, status: cr.accStat, currency: cr.ccy }
         });
 
@@ -142,13 +134,10 @@ const a2aTransfer = async (req, res) => {
     const txnAmount  = Number(amount);
     const txnNarrative = narrative || `A2A transfer ${drAcNo} → ${crAcNo}`;
 
-    // ── Step 1: Validate both accounts ───────────────────────────────────────
-    let drInfo, crInfo;
+    // ── Step 1: Validate credit account only ─────────────────────────────────
+    let crInfo;
     try {
-        [drInfo, crInfo] = await Promise.all([
-            fetchAccountDetails(drAcNo),
-            fetchAccountDetails(crAcNo)
-        ]);
+        crInfo = await fetchAccountDetails(crAcNo);
     } catch (err) {
         return res.status(400).json({ status: "Error", message: err.message });
     }
@@ -161,13 +150,16 @@ const a2aTransfer = async (req, res) => {
             cr: { acNo: crInfo.acNo, name: crInfo.custName, status: crInfo.accStat }
         });
     }
-    if (drInfo.noDebit === "Y" || drInfo.frozen === "Y") {
+    if (crInfo.frozen === "Y") {
         return res.status(422).json({
             status:  "Error",
-            message: `Debit account ${drAcNo} (${drInfo.custName}) does not allow debits or is frozen`,
-            dr: { acNo: drInfo.acNo, name: drInfo.custName, status: drInfo.accStat }
+            message: `Credit account ${crAcNo} (${crInfo.custName}) is frozen`,
+            cr: { acNo: crInfo.acNo, name: crInfo.custName, status: crInfo.accStat }
         });
     }
+
+    // Debit account is trusted — use placeholder info
+    const drInfo = { acNo: drAcNo, custName: null };
 
     // Create audit row
     let audit = null;
