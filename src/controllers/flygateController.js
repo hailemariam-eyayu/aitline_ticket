@@ -173,8 +173,11 @@ const validatePNR = async (req, res) => {
         const pnr = response.data?.PNR || response.data?.pnr || "";
         const currency = response.data?.Currency || response.data?.currency || "ETB";
         const statusDesc = response.data?.statusCodeResponseDescription || response.data?.message || "";
+        const statusCodeResponse = Number(response.data?.statusCodeResponse ?? -1);
 
-        const isSuccess = statusDesc === "Success" || amount > 0;
+        // Only proceed if the order is in "Pending Order" state (statusCodeResponse === 1).
+        // Any other status (Expired=2, Cancelled, Error, etc.) is a hard stop.
+        const isSuccess = statusCodeResponse === 1 && statusDesc === "Pending Order";
 
         if (isSuccess) {
             // Store pending order details in FLYGATEDetails (reqType=1 = GetOrder response)
@@ -191,7 +194,8 @@ const validatePNR = async (req, res) => {
 
             return res.status(200).json({
                 success: true,
-                data: { orderId: orderid, amount, customerName, pnr, currency }
+                data: { orderId: orderid, amount, customerName, pnr, currency },
+                rawResponse: response.data
             });
         }
 
@@ -272,7 +276,8 @@ const confirmOrder = async (req, res) => {
 
             const reAmount     = Number(revalidate.data?.Amount ?? revalidate.data?.amount ?? 0);
             const reStatusDesc = revalidate.data?.statusCodeResponseDescription || revalidate.data?.message || "";
-            const reIsValid    = reStatusDesc === "Success" || reAmount > 0;
+            const reStatusCode = Number(revalidate.data?.statusCodeResponse ?? -1);
+            const reIsValid    = reStatusCode === 1 && reStatusDesc === "Pending Order";
 
             if (!reIsValid) {
                 return res.status(404).json({
